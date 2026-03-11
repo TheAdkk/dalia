@@ -2,12 +2,31 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>dalia-ts</title>
+    <title>Dalia — Audio Visualizer</title>
+    <meta name="description" content="Dalia: Real-time audio visualization engine powered by Rust/WASM" />
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <h1>🌺 Dalia Engine <span class="version">v0.1</span></h1>
+      <p class="subtitle">Zero-Copy Audio Bridge — Phase 1</p>
+
+      <div class="audio-controls">
+        <audio id="audio-player" controls crossorigin="anonymous">
+          <source src="/test_music.opus" type="audio/ogg" />
+          Your browser does not support the audio element.
+        </audio>
+        <p class="hint">▲ Play audio to see the visualizer</p>
+      </div>
+
+      <canvas id="visualizer" width="800" height="300"></canvas>
+
+      <div class="stats">
+        <span id="fps-counter">FPS: --</span>
+        <span id="buffer-info">Buffer: --</span>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
