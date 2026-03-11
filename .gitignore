@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dalia-ts/dist/
+dalia-core/target/
+dalia-core/pkg/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
