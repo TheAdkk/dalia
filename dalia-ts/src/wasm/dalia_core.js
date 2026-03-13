@@ -3,7 +3,7 @@
 /**
  * The core audio processing engine for Dalia.
  * Receives raw frequency data from JavaScript and processes it
- * into normalized float data accessible via shared WASM memory.
+ * into a 3D vertex geometry buffer accessible via shared WASM memory.
  */
 export class DaliaEngine {
     __destroy_into_raw() {
@@ -15,6 +15,23 @@ export class DaliaEngine {
     free() {
         const ptr = this.__destroy_into_raw();
         wasm.__wbg_daliaengine_free(ptr, 0);
+    }
+    /**
+     * Returns the length of the geometry buffer in floats (NUM_VERTICES * 3).
+     * @returns {number}
+     */
+    get_geometry_len() {
+        const ret = wasm.daliaengine_get_geometry_len(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Returns a raw pointer to the calculated 3D geometry buffer.
+     * JS will read a Float32Array of length NUM_VERTICES * 3.
+     * @returns {number}
+     */
+    get_geometry_ptr() {
+        const ret = wasm.daliaengine_get_geometry_ptr(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
      * Returns the length of the processed data buffer.
@@ -32,15 +49,6 @@ export class DaliaEngine {
      */
     get_processed_data_ptr() {
         const ret = wasm.daliaengine_get_processed_data_ptr(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Returns a raw pointer to the calculated uniforms buffer.
-     * JS will read a Float32Array of length 6.
-     * @returns {number}
-     */
-    get_shader_uniforms_ptr() {
-        const ret = wasm.daliaengine_get_shader_uniforms_ptr(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
@@ -64,6 +72,12 @@ export class DaliaEngine {
         const ptr0 = passArray8ToWasm0(frequency_data, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         wasm.daliaengine_process_audio(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
+     * Toggles the mashup mode to transition to the next preset.
+     */
+    toggle_mashup() {
+        wasm.daliaengine_toggle_mashup(this.__wbg_ptr);
     }
 }
 if (Symbol.dispose) DaliaEngine.prototype[Symbol.dispose] = DaliaEngine.prototype.free;

@@ -2,13 +2,16 @@ import './style.css';
 import init, { DaliaEngine } from './wasm/dalia_core.js';
 import type { InitOutput } from './wasm/dalia_core.js';
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 // ─── WASM + Audio State ───────────────────────────────────────
 let wasmModule: InitOutput;
 let engine: DaliaEngine;
 let audioCtx: AudioContext;
 let analyser: AnalyserNode;
-let frequencyData: Uint8Array;
+let dataArray: Uint8Array;
 let isAudioConnected = false;
 
 // ─── DOM Elements ─────────────────────────────────────────────
@@ -25,115 +28,68 @@ let mediaRecorder: MediaRecorder | null = null;
 let recordedChunks: Blob[] = [];
 let audioDestination: MediaStreamAudioDestinationNode | null = null;
 
-// ─── Three.js Ping-Pong WebGL Setup ────────────────────────────
+// ─── Three.js 3D Vector WebGL Setup ────────────────────────────
 let renderer: THREE.WebGLRenderer;
-let camera: THREE.OrthographicCamera;
+let camera: THREE.PerspectiveCamera;
 let scene: THREE.Scene;
-let targetA: THREE.WebGLRenderTarget;
-let targetB: THREE.WebGLRenderTarget;
-let feedbackMaterial: THREE.ShaderMaterial;
-let quad: THREE.Mesh;
+let geometry: THREE.BufferGeometry;
+let composer: EffectComposer;
+let pointsMaterial: THREE.PointsMaterial;
+let points: THREE.Points;
+let wasmMemoryView: Float32Array;
 
-// ─── Canvas / Three.js Setup ──────────────────────────────────
+// ─── WebGL & Three.js 3D Pipeline ────────────────────────────
 function setupWebGL() {
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
-  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setClearColor(0x000000, 1);
 
-  camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   scene = new THREE.Scene();
 
-  const rtOptions = {
-    minFilter: THREE.LinearFilter,
-    magFilter: THREE.LinearFilter,
-    format: THREE.RGBAFormat,
-  };
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.z = 8;
+  camera.position.y = 2;
+  camera.lookAt(0, 0, 0);
 
-  targetA = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, rtOptions);
-  targetB = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, rtOptions);
+  // Link to WASM Shared Memory
+  const ptr = engine.get_geometry_ptr();
+  const len = engine.get_geometry_len();
+  wasmMemoryView = new Float32Array(wasmModule.memory.buffer, ptr, len);
 
-  feedbackMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-      tDiffuse: { value: null },
-      u_zoom: { value: 1.0 },
-      u_rot: { value: 0.0 },
-      u_warp: { value: 0.0 },
-      u_bass: { value: 0.0 },
-      u_treb: { value: 0.0 },
-      u_time: { value: 0.0 },
-      u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform sampler2D tDiffuse;
-      uniform float u_zoom;
-      uniform float u_rot;
-      uniform float u_warp;
-      uniform float u_bass;
-      uniform float u_treb;
-      uniform float u_time;
-      uniform vec2 u_resolution;
+  geometry = new THREE.BufferGeometry();
+  // We use the WASM memory directly as the attribute buffer
+  geometry.setAttribute('position', new THREE.BufferAttribute(wasmMemoryView, 3));
 
-      varying vec2 vUv;
-
-      void main() {
-        vec2 uv = vUv;
-        
-        // Centered coordinates for rotation & zoom
-        vec2 p = uv - 0.5;
-        
-        // Apply Warp
-        p.x += sin(p.y * 10.0 + u_warp) * 0.01 * u_warp;
-        p.y += cos(p.x * 10.0 + u_warp) * 0.01 * u_warp;
-
-        // Apply Rotation
-        float c = cos(u_rot);
-        float s = sin(u_rot);
-        mat2 rot_mat = mat2(c, -s, s, c);
-        p = rot_mat * p;
-        
-        // Apply Zoom
-        p /= u_zoom;
-        
-        vec2 sampleUv = p + 0.5;
-        
-        // Sample previous frame
-        vec4 prevColor = texture2D(tDiffuse, sampleUv);
-        
-        // Music-reactive new color injection inside the tunnel center
-        vec3 injectedColor = vec3(0.0);
-        float d = length(p);
-        if (d < 0.05 + u_bass * 0.1) {
-            // Chroma Spectrum cycling
-            float r = sin(u_time * 2.0) * 0.5 + 0.5;
-            float g = sin(u_time * 2.0 + 2.094) * 0.5 + 0.5;
-            float b = sin(u_time * 2.0 + 4.188) * 0.5 + 0.5;
-            
-            injectedColor = vec3(r * u_bass, g * u_treb * 0.8, b * (1.0 - u_bass * 0.5));
-        }
-
-        // Add colors and slight fade out
-        vec4 nextColor = prevColor * 0.98 + vec4(injectedColor, 1.0);
-        gl_FragColor = nextColor;
-      }
-    `,
+  pointsMaterial = new THREE.PointsMaterial({
+    color: 0xaa55ff,
+    size: 0.05,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    opacity: 0.8,
   });
 
-  quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), feedbackMaterial);
-  scene.add(quad);
+  points = new THREE.Points(geometry, pointsMaterial);
+  scene.add(points);
+
+  // Post-Processing: Neon Bloom
+  const renderScene = new RenderPass(scene, camera);
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 0.4, 0.1);
+  bloomPass.strength = 1.5;
+  bloomPass.radius = 0.5;
+  bloomPass.threshold = 0.1;
+
+  composer = new EffectComposer(renderer);
+  composer.addPass(renderScene);
+  composer.addPass(bloomPass);
 }
 
 function resizeCanvas() {
+  if (!camera || !renderer) return;
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  targetA.setSize(window.innerWidth, window.innerHeight);
-  targetB.setSize(window.innerWidth, window.innerHeight);
-  feedbackMaterial.uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
 }
 
 // ─── Audio Setup ──────────────────────────────────────────────
@@ -153,7 +109,7 @@ function connectAudio() {
   audioDestination = audioCtx.createMediaStreamDestination();
   analyser.connect(audioDestination);
 
-  frequencyData = new Uint8Array(analyser.frequencyBinCount);
+  dataArray = new Uint8Array(analyser.frequencyBinCount);
   isAudioConnected = true;
   recordBtn.disabled = false;
 }
@@ -177,7 +133,6 @@ function startRecording() {
   const audioTrack = audioDestination!.stream.getAudioTracks()[0];
   const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), audioTrack]);
 
-  // Try to use VP9 or VP8 for better quality WebM
   let mimeType = 'video/webm;codecs=vp9';
   if (!MediaRecorder.isTypeSupported(mimeType)) {
     mimeType = 'video/webm;codecs=vp8';
@@ -197,74 +152,55 @@ function startRecording() {
   mediaRecorder.onstop = () => {
     const blob = new Blob(recordedChunks, { type: mimeType });
     const url = URL.createObjectURL(blob);
-    
-    // Force download
     const a = document.createElement('a');
     a.style.display = 'none';
     a.href = url;
     a.download = 'dalia-render.webm';
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 100);
+    window.URL.revokeObjectURL(url);
+    
+    recordBtn.classList.remove('recording');
+    recordBtn.textContent = '🔴 REC';
   };
 
   mediaRecorder.start();
   recordBtn.classList.add('recording');
-  recordBtn.textContent = '⏹ Detener Grabación';
+  recordBtn.textContent = '⏹ STOP';
 }
 
 function stopRecording() {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
   }
-  recordBtn.classList.remove('recording');
-  recordBtn.textContent = '🔴 Grabar Video';
 }
 
-// ─── Render Loop (60 FPS) ────────────────────────────────────
+// ─── Render Loop ─────────────────────────────────────────────
 function renderLoop() {
   requestAnimationFrame(renderLoop);
 
-  if (!isAudioConnected || !analyser) return;
+  if (!isAudioConnected || !analyser) {
+    if (composer) composer.render();
+    return;
+  }
 
   // 1. Get raw frequency data from Web Audio API
-  analyser.getByteFrequencyData(frequencyData as any);
+  analyser.getByteFrequencyData(dataArray);
 
-  // 2. Pass raw bytes to Rust/WASM for processing (zero-copy bridge)
-  engine.process_audio(frequencyData);
+  // 2. Send to Rust to calculate new vertices
+  engine.process_audio(dataArray);
 
-  // 3. Read calculated math presets directly from WASM memory
-  const ptr = engine.get_shader_uniforms_ptr();
-  const uniformsBuffer = new Float32Array(wasmModule.memory.buffer, ptr, 7);
+  // 3. Notify Three.js that the shared memory data changed
+  geometry.attributes.position.needsUpdate = true;
   
-  const [bass, _mid, treb, zoom, rot, warp, time] = uniformsBuffer;
+  // Modulate camera a bit based on time for extra life
+  const time = performance.now() * 0.0005;
+  camera.position.x = Math.sin(time) * 2;
+  camera.position.z = 8 + Math.cos(time) * 1;
+  camera.lookAt(0, 0, 0);
 
-  // 4. Update Shader Uniforms
-  feedbackMaterial.uniforms.u_bass.value = bass;
-  feedbackMaterial.uniforms.u_treb.value = treb;
-  feedbackMaterial.uniforms.u_warp.value = warp;
-  feedbackMaterial.uniforms.u_zoom.value = zoom;
-  feedbackMaterial.uniforms.u_rot.value = rot;
-  feedbackMaterial.uniforms.u_time.value = time;
-
-  // 5. Ping-Pong Rendering
-  // Render using targetA as input texture into targetB
-  feedbackMaterial.uniforms.tDiffuse.value = targetA.texture;
-  renderer.setRenderTarget(targetB);
-  renderer.render(scene, camera);
-
-  // Render targetB to the actual screen
-  feedbackMaterial.uniforms.tDiffuse.value = targetB.texture;
-  renderer.setRenderTarget(null);
-  renderer.render(scene, camera);
-
-  // Swap targets (Ping-Pong)
-  const temp = targetA;
-  targetA = targetB;
-  targetB = temp;
+  // 4. Render via Composer (Bloom)
+  composer.render();
 }
 
 // ─── Custom Player UI Logic ────────────────────────────────────
@@ -356,10 +292,22 @@ async function main() {
 
   recordBtn.addEventListener('click', toggleRecording);
 
-  // Start render loop immediately
-  renderLoop();
+  // Add Mashup Mode Button programmatically or hook it if in HTML
+  let mashupBtn = document.getElementById('mashup-btn');
+  if (!mashupBtn) {
+    mashupBtn = document.createElement('button');
+    mashupBtn.id = 'mashup-btn';
+    mashupBtn.className = 'control-btn mashup';
+    mashupBtn.textContent = '🔀';
+    mashupBtn.title = 'Mashup Mode';
+    document.querySelector('.progress-wrapper')?.appendChild(mashupBtn);
+  }
+  
+  mashupBtn.addEventListener('click', () => {
+    engine.toggle_mashup();
+  });
 
-  console.log('🌺 Dalia Engine initialized — Phase 2: WebGL Feedback Loop active');
+  renderLoop();
 }
 
 main().catch(console.error);

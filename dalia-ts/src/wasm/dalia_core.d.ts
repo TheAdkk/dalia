@@ -4,11 +4,20 @@
 /**
  * The core audio processing engine for Dalia.
  * Receives raw frequency data from JavaScript and processes it
- * into normalized float data accessible via shared WASM memory.
+ * into a 3D vertex geometry buffer accessible via shared WASM memory.
  */
 export class DaliaEngine {
     free(): void;
     [Symbol.dispose](): void;
+    /**
+     * Returns the length of the geometry buffer in floats (NUM_VERTICES * 3).
+     */
+    get_geometry_len(): number;
+    /**
+     * Returns a raw pointer to the calculated 3D geometry buffer.
+     * JS will read a Float32Array of length NUM_VERTICES * 3.
+     */
+    get_geometry_ptr(): number;
     /**
      * Returns the length of the processed data buffer.
      */
@@ -19,11 +28,6 @@ export class DaliaEngine {
      * directly into WASM linear memory (zero-copy read).
      */
     get_processed_data_ptr(): number;
-    /**
-     * Returns a raw pointer to the calculated uniforms buffer.
-     * JS will read a Float32Array of length 6.
-     */
-    get_shader_uniforms_ptr(): number;
     /**
      * Creates a new DaliaEngine instance.
      */
@@ -36,6 +40,10 @@ export class DaliaEngine {
      * into WASM linear memory — no JSON, no serde.
      */
     process_audio(frequency_data: Uint8Array): void;
+    /**
+     * Toggles the mashup mode to transition to the next preset.
+     */
+    toggle_mashup(): void;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -43,11 +51,13 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_daliaengine_free: (a: number, b: number) => void;
+    readonly daliaengine_get_geometry_len: (a: number) => number;
+    readonly daliaengine_get_geometry_ptr: (a: number) => number;
     readonly daliaengine_get_processed_data_len: (a: number) => number;
     readonly daliaengine_get_processed_data_ptr: (a: number) => number;
-    readonly daliaengine_get_shader_uniforms_ptr: (a: number) => number;
     readonly daliaengine_new: () => number;
     readonly daliaengine_process_audio: (a: number, b: number, c: number) => void;
+    readonly daliaengine_toggle_mashup: (a: number) => void;
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_start: () => void;
