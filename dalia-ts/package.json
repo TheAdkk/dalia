@@ -1,11 +1,17 @@
 {
   "name": "dalia-ts",
-  "private": true,
-  "version": "0.0.0",
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "files": [
+    "dist",
+    "../dalia-core/pkg"
+  ],
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build:wasm": "cd ../dalia-core && wasm-pack build --target web",
+    "build": "npm run build:wasm && tsc && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
