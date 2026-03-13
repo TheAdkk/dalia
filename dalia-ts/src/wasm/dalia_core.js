@@ -35,6 +35,15 @@ export class DaliaEngine {
         return ret >>> 0;
     }
     /**
+     * Returns a raw pointer to the calculated uniforms buffer.
+     * JS will read a Float32Array of length 6.
+     * @returns {number}
+     */
+    get_shader_uniforms_ptr() {
+        const ret = wasm.daliaengine_get_shader_uniforms_ptr(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
      * Creates a new DaliaEngine instance.
      */
     constructor() {

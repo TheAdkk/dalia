@@ -20,6 +20,11 @@ export class DaliaEngine {
      */
     get_processed_data_ptr(): number;
     /**
+     * Returns a raw pointer to the calculated uniforms buffer.
+     * JS will read a Float32Array of length 6.
+     */
+    get_shader_uniforms_ptr(): number;
+    /**
      * Creates a new DaliaEngine instance.
      */
     constructor();
@@ -40,6 +45,7 @@ export interface InitOutput {
     readonly __wbg_daliaengine_free: (a: number, b: number) => void;
     readonly daliaengine_get_processed_data_len: (a: number) => number;
     readonly daliaengine_get_processed_data_ptr: (a: number) => number;
+    readonly daliaengine_get_shader_uniforms_ptr: (a: number) => number;
     readonly daliaengine_new: () => number;
     readonly daliaengine_process_audio: (a: number, b: number, c: number) => void;
     readonly __wbindgen_externrefs: WebAssembly.Table;
