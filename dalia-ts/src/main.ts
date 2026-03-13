@@ -15,17 +15,15 @@ let isAudioConnected = false;
 const canvas = document.getElementById('visualizer') as HTMLCanvasElement;
 const audioEl = document.getElementById('audio-player') as HTMLAudioElement;
 const recordBtn = document.getElementById('record-btn') as HTMLButtonElement;
-const fpsCounter = document.getElementById('fps-counter')!;
+const playPauseBtn = document.getElementById('play-pause-btn') as HTMLButtonElement;
+const progressBar = document.getElementById('progress-bar') as HTMLInputElement;
+const timeCurrent = document.getElementById('time-current') as HTMLSpanElement;
+const timeTotal = document.getElementById('time-total') as HTMLSpanElement;
 
 // ─── Recording State ──────────────────────────────────────────
 let mediaRecorder: MediaRecorder | null = null;
 let recordedChunks: Blob[] = [];
 let audioDestination: MediaStreamAudioDestinationNode | null = null;
-
-// ─── FPS Tracking ─────────────────────────────────────────────
-let frameCount = 0;
-let lastFpsUpdate = performance.now();
-let currentFps = 0;
 
 // ─── Three.js Ping-Pong WebGL Setup ────────────────────────────
 let renderer: THREE.WebGLRenderer;
@@ -230,16 +228,6 @@ function stopRecording() {
 function renderLoop() {
   requestAnimationFrame(renderLoop);
 
-  // FPS calculation
-  frameCount++;
-  const now = performance.now();
-  if (now - lastFpsUpdate >= 1000) {
-    currentFps = frameCount;
-    frameCount = 0;
-    lastFpsUpdate = now;
-    fpsCounter.textContent = `FPS: ${currentFps}`;
-  }
-
   if (!isAudioConnected || !analyser) return;
 
   // 1. Get raw frequency data from Web Audio API
@@ -279,22 +267,91 @@ function renderLoop() {
   targetB = temp;
 }
 
+// ─── Custom Player UI Logic ────────────────────────────────────
+function formatTime(seconds: number): string {
+  if (isNaN(seconds)) return "0:00";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function initPlayerUI() {
+  // Update time and progress bar
+  audioEl.addEventListener('timeupdate', () => {
+    const current = audioEl.currentTime;
+    const duration = audioEl.duration;
+    if (!isNaN(duration)) {
+      progressBar.value = ((current / duration) * 100).toString();
+      timeCurrent.textContent = formatTime(current);
+      timeTotal.textContent = formatTime(duration);
+    }
+  });
+
+  // Handle seeking via progress bar
+  progressBar.addEventListener('input', () => {
+    const duration = audioEl.duration;
+    if (!isNaN(duration)) {
+      const seekTo = (parseFloat(progressBar.value) / 100) * duration;
+      audioEl.currentTime = seekTo;
+    }
+  });
+
+  // Handle Play/Pause button
+  playPauseBtn.addEventListener('click', () => {
+    if (audioEl.paused) {
+      audioEl.play().then(() => {
+        playPauseBtn.textContent = '⏸';
+        document.getElementById('floating-player')?.classList.remove('fade-out');
+      });
+    } else {
+      audioEl.pause();
+      playPauseBtn.textContent = '▶';
+    }
+  });
+
+  // Hide controls on inactivity (optional polish)
+  let timeout: number;
+  const playerContainer = document.getElementById('floating-player');
+  const resetIdleTimer = () => {
+    playerContainer?.classList.remove('fade-out');
+    clearTimeout(timeout);
+    timeout = window.setTimeout(() => {
+      // Only fade out if playing and not hovering over controls
+      if (!audioEl.paused && !playerContainer?.matches(':hover')) {
+        playerContainer?.classList.add('fade-out');
+      }
+    }, 3000);
+  };
+  
+  document.addEventListener('mousemove', resetIdleTimer);
+  document.addEventListener('mousedown', resetIdleTimer);
+  document.addEventListener('keydown', resetIdleTimer);
+  resetIdleTimer();
+}
+
 // ─── Bootstrap ───────────────────────────────────────────────
 async function main() {
   // Initialize WASM module
   wasmModule = await init();
   engine = new DaliaEngine();
 
-  // Setup WebGL
+  // Setup WebGL and UI
   setupWebGL();
+  initPlayerUI();
   window.addEventListener('resize', resizeCanvas);
 
-  // Connect audio on first user interaction (autoplay policy)
+  // Connect audio on first user interaction to satisfy autoplay policy
+  // We can hook it into the play button or the audio element playing
   audioEl.addEventListener('play', () => {
     connectAudio();
-    if (audioCtx.state === 'suspended') {
+    if (audioCtx && audioCtx.state === 'suspended') {
       audioCtx.resume();
     }
+    playPauseBtn.textContent = '⏸';
+  });
+
+  audioEl.addEventListener('pause', () => {
+    playPauseBtn.textContent = '▶';
   });
 
   recordBtn.addEventListener('click', toggleRecording);

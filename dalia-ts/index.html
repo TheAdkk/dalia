@@ -8,23 +8,22 @@
   </head>
   <body>
     <div id="app">
-      <h1>🌺 Dalia Engine <span class="version">v0.1</span></h1>
-      <p class="subtitle">Zero-Copy Audio Bridge — Phase 1</p>
+      <audio id="audio-player" crossorigin="anonymous" style="display: none;">
+        <source src="/test_music.opus" type="audio/ogg" />
+      </audio>
 
-      <div class="audio-controls">
-        <audio id="audio-player" controls crossorigin="anonymous">
-          <source src="/test_music.opus" type="audio/ogg" />
-          Your browser does not support the audio element.
-        </audio>
-        <button id="record-btn" class="record-btn" disabled>🔴 Grabar Video</button>
-        <p class="hint">▲ Play audio to see the visualizer</p>
-      </div>
+      <!-- Fullscreen visualizer -->
+      <canvas id="visualizer"></canvas>
 
-      <canvas id="visualizer" width="800" height="300"></canvas>
-
-      <div class="stats">
-        <span id="fps-counter">FPS: --</span>
-        <span id="buffer-info">Buffer: --</span>
+      <!-- Glassmorphism Floating Player -->
+      <div id="floating-player" class="player-container fade-out">
+        <button id="play-pause-btn" class="control-btn play">▶</button>
+        <div class="progress-wrapper">
+          <span id="time-current">0:00</span>
+          <input type="range" id="progress-bar" value="0" max="100" step="0.1" />
+          <span id="time-total">0:00</span>
+        </div>
+        <button id="record-btn" class="record-btn" disabled>🔴 REC</button>
       </div>
     </div>
 
