@@ -7,8 +7,10 @@ use wasm_bindgen::prelude::*;
 pub struct DaliaEngine {
     /// Internal buffer holding processed audio data (normalized 0.0–1.0)
     processed_data: Vec<f32>,
-    /// Contiguous array for uniforms: [bass, mid, treb, zoom, rot, warp]
-    uniforms: [f32; 6],
+    /// Accumulated time for shaders
+    time: f32,
+    /// Contiguous array for uniforms: [bass, mid, treb, zoom, rot, warp, time]
+    uniforms: [f32; 7],
 }
 
 #[wasm_bindgen]
@@ -18,7 +20,8 @@ impl DaliaEngine {
     pub fn new() -> DaliaEngine {
         DaliaEngine {
             processed_data: Vec::new(),
-            uniforms: [0.0; 6],
+            time: 0.0,
+            uniforms: [0.0; 7],
         }
     }
 
@@ -69,12 +72,25 @@ impl DaliaEngine {
         let mid = self.uniforms[1] * (1.0 - alpha) + current_mid * alpha;
         let treb = self.uniforms[2] * (1.0 - alpha) + current_treb * alpha;
 
-        // Calculate transformation variables
-        let zoom = 1.0 + (bass * 0.05);
-        let rot = treb * 0.01;
+        // Advance time (approx 60fps)
+        self.time += 0.016;
+
+        // Calculate transformation variables with decay/friction
+        // Reactive zoom: jumps when bass is high, decays to 0.99
+        let current_zoom = self.uniforms[3];
+        let target_zoom = if bass > 0.65 { 1.05 + bass * 0.1 } else { 0.99 };
+        // Lerp zoom
+        let zoom_alpha = if bass > 0.65 { 0.3 } else { 0.05 }; 
+        let zoom = current_zoom * (1.0 - zoom_alpha) + target_zoom * zoom_alpha;
+
+        // Reactive rotation: shifts based on mids
+        let rot_speed = mid * 0.05;
+        let current_rot = self.uniforms[4];
+        let rot = current_rot + rot_speed;
+
         let warp = mid * 0.02;
 
-        self.uniforms = [bass, mid, treb, zoom, rot, warp];
+        self.uniforms = [bass, mid, treb, zoom, rot, warp, self.time];
     }
 
     /// Returns a raw pointer to the calculated uniforms buffer.

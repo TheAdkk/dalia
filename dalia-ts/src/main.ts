@@ -56,6 +56,7 @@ function setupWebGL() {
       u_warp: { value: 0.0 },
       u_bass: { value: 0.0 },
       u_treb: { value: 0.0 },
+      u_time: { value: 0.0 },
       u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
     },
     vertexShader: `
@@ -72,6 +73,7 @@ function setupWebGL() {
       uniform float u_warp;
       uniform float u_bass;
       uniform float u_treb;
+      uniform float u_time;
       uniform vec2 u_resolution;
 
       varying vec2 vUv;
@@ -104,7 +106,12 @@ function setupWebGL() {
         vec3 injectedColor = vec3(0.0);
         float d = length(p);
         if (d < 0.05 + u_bass * 0.1) {
-            injectedColor = vec3(u_bass, u_treb * 0.5, 1.0 - u_bass);
+            // Chroma Spectrum cycling
+            float r = sin(u_time * 2.0) * 0.5 + 0.5;
+            float g = sin(u_time * 2.0 + 2.094) * 0.5 + 0.5;
+            float b = sin(u_time * 2.0 + 4.188) * 0.5 + 0.5;
+            
+            injectedColor = vec3(r * u_bass, g * u_treb * 0.8, b * (1.0 - u_bass * 0.5));
         }
 
         // Add colors and slight fade out
@@ -166,9 +173,9 @@ function renderLoop() {
 
   // 3. Read calculated math presets directly from WASM memory
   const ptr = engine.get_shader_uniforms_ptr();
-  const uniformsBuffer = new Float32Array(wasmModule.memory.buffer, ptr, 6);
+  const uniformsBuffer = new Float32Array(wasmModule.memory.buffer, ptr, 7);
   
-  const [bass, _mid, treb, zoom, rot, warp] = uniformsBuffer;
+  const [bass, _mid, treb, zoom, rot, warp, time] = uniformsBuffer;
 
   // 4. Update Shader Uniforms
   feedbackMaterial.uniforms.u_bass.value = bass;
@@ -176,6 +183,7 @@ function renderLoop() {
   feedbackMaterial.uniforms.u_warp.value = warp;
   feedbackMaterial.uniforms.u_zoom.value = zoom;
   feedbackMaterial.uniforms.u_rot.value = rot;
+  feedbackMaterial.uniforms.u_time.value = time;
 
   // 5. Ping-Pong Rendering
   // Render using targetA as input texture into targetB
