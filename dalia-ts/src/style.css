@@ -91,6 +91,43 @@ audio::-webkit-media-controls-panel {
   50% { opacity: 1; }
 }
 
+.record-btn {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 10px;
+  transition: all 0.2s ease;
+  vertical-align: top;
+}
+
+.record-btn:hover:not(:disabled) {
+  background: rgba(244, 63, 94, 0.1);
+  border-color: var(--bar-high);
+}
+
+.record-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.record-btn.recording {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: var(--bar-high);
+  color: var(--bar-high);
+  animation: pulse-record 1.5s infinite alternate;
+}
+
+@keyframes pulse-record {
+  from { box-shadow: 0 0 5px rgba(244, 63, 94, 0.1); }
+  to { box-shadow: 0 0 15px rgba(244, 63, 94, 0.6); }
+}
+
 #visualizer {
   width: 100%;
   max-width: 800px;

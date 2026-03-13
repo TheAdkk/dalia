@@ -14,7 +14,13 @@ let isAudioConnected = false;
 // ─── DOM Elements ─────────────────────────────────────────────
 const canvas = document.getElementById('visualizer') as HTMLCanvasElement;
 const audioEl = document.getElementById('audio-player') as HTMLAudioElement;
+const recordBtn = document.getElementById('record-btn') as HTMLButtonElement;
 const fpsCounter = document.getElementById('fps-counter')!;
+
+// ─── Recording State ──────────────────────────────────────────
+let mediaRecorder: MediaRecorder | null = null;
+let recordedChunks: Blob[] = [];
+let audioDestination: MediaStreamAudioDestinationNode | null = null;
 
 // ─── FPS Tracking ─────────────────────────────────────────────
 let frameCount = 0;
@@ -144,9 +150,80 @@ function connectAudio() {
   const source = audioCtx.createMediaElementSource(audioEl);
   source.connect(analyser);
   analyser.connect(audioCtx.destination);
+  
+  // Setup audio destination for recording
+  audioDestination = audioCtx.createMediaStreamDestination();
+  analyser.connect(audioDestination);
 
   frequencyData = new Uint8Array(analyser.frequencyBinCount);
   isAudioConnected = true;
+  recordBtn.disabled = false;
+}
+
+// ─── Recording Logic ─────────────────────────────────────────
+function toggleRecording() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+    startRecording();
+  } else {
+    stopRecording();
+  }
+}
+
+function startRecording() {
+  recordedChunks = [];
+  
+  // Capture canvas at 60 FPS
+  const canvasStream = canvas.captureStream(60);
+  
+  // Combine canvas video track and audio destination track
+  const audioTrack = audioDestination!.stream.getAudioTracks()[0];
+  const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), audioTrack]);
+
+  // Try to use VP9 or VP8 for better quality WebM
+  let mimeType = 'video/webm;codecs=vp9';
+  if (!MediaRecorder.isTypeSupported(mimeType)) {
+    mimeType = 'video/webm;codecs=vp8';
+  }
+  if (!MediaRecorder.isTypeSupported(mimeType)) {
+    mimeType = 'video/webm'; // Fallback
+  }
+
+  mediaRecorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 5000000 /* 5 Mbps */ });
+
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) {
+      recordedChunks.push(e.data);
+    }
+  };
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    
+    // Force download
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = 'dalia-render.webm';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  };
+
+  mediaRecorder.start();
+  recordBtn.classList.add('recording');
+  recordBtn.textContent = '⏹ Detener Grabación';
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  recordBtn.classList.remove('recording');
+  recordBtn.textContent = '🔴 Grabar Video';
 }
 
 // ─── Render Loop (60 FPS) ────────────────────────────────────
@@ -219,6 +296,8 @@ async function main() {
       audioCtx.resume();
     }
   });
+
+  recordBtn.addEventListener('click', toggleRecording);
 
   // Start render loop immediately
   renderLoop();
