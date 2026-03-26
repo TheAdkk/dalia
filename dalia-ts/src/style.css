@@ -170,3 +170,40 @@ input[type="range"]::-webkit-slider-thumb:hover {
   from { box-shadow: 0 0 5px rgba(244, 63, 94, 0.1); }
   to { box-shadow: 0 0 15px rgba(244, 63, 94, 0.4); }
 }
+
+/* ─── Preset Nav Buttons ─── */
+.control-btn.preset-nav {
+  font-size: 0.9rem;
+  opacity: 0.7;
+  transition: opacity 0.2s, transform 0.2s, background 0.2s;
+}
+
+.control-btn.preset-nav:hover {
+  opacity: 1;
+  transform: scale(1.15);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ─── Preset Label Overlay ─── */
+.preset-label {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  font-family: var(--font-sans);
+  font-size: clamp(1.4rem, 5vw, 2.8rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow:
+    0 0 20px rgba(180, 100, 255, 0.9),
+    0 0 40px rgba(180, 100, 255, 0.6),
+    0 0 80px rgba(100, 50, 255, 0.4);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  white-space: nowrap;
+}
+

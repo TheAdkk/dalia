@@ -1,10 +1,5 @@
 /* @ts-self-types="./dalia_core.d.ts" */
 
-/**
- * The core audio processing engine for Dalia.
- * Receives raw frequency data from JavaScript and processes it
- * into a 3D vertex geometry buffer accessible via shared WASM memory.
- */
 export class DaliaEngine {
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
@@ -17,7 +12,35 @@ export class DaliaEngine {
         wasm.__wbg_daliaengine_free(ptr, 0);
     }
     /**
-     * Returns the length of the geometry buffer in floats (NUM_VERTICES * 3).
+     * Returns current preset index (0-5)
+     * @returns {number}
+     */
+    current_preset_index() {
+        const ret = wasm.daliaengine_current_preset_index(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    get_air() {
+        const ret = wasm.daliaengine_get_air(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_bass() {
+        const ret = wasm.daliaengine_get_bass(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_energy() {
+        const ret = wasm.daliaengine_get_energy(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * @returns {number}
      */
     get_geometry_len() {
@@ -25,8 +48,6 @@ export class DaliaEngine {
         return ret >>> 0;
     }
     /**
-     * Returns a raw pointer to the calculated 3D geometry buffer.
-     * JS will read a Float32Array of length NUM_VERTICES * 3.
      * @returns {number}
      */
     get_geometry_ptr() {
@@ -34,7 +55,20 @@ export class DaliaEngine {
         return ret >>> 0;
     }
     /**
-     * Returns the length of the processed data buffer.
+     * @returns {number}
+     */
+    get_mid() {
+        const ret = wasm.daliaengine_get_mid(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_presence() {
+        const ret = wasm.daliaengine_get_presence(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * @returns {number}
      */
     get_processed_data_len() {
@@ -42,9 +76,6 @@ export class DaliaEngine {
         return ret >>> 0;
     }
     /**
-     * Returns a raw pointer to the processed data buffer.
-     * JavaScript reads this pointer to create a Float32Array view
-     * directly into WASM linear memory (zero-copy read).
      * @returns {number}
      */
     get_processed_data_ptr() {
@@ -52,20 +83,32 @@ export class DaliaEngine {
         return ret >>> 0;
     }
     /**
-     * Creates a new DaliaEngine instance.
+     * @returns {number}
      */
+    get_sub_bass() {
+        const ret = wasm.daliaengine_get_sub_bass(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_treb() {
+        const ret = wasm.daliaengine_get_treb(this.__wbg_ptr);
+        return ret;
+    }
     constructor() {
         const ret = wasm.daliaengine_new();
         this.__wbg_ptr = ret >>> 0;
         DaliaEngineFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
+    next_preset() {
+        wasm.daliaengine_next_preset(this.__wbg_ptr);
+    }
+    prev_preset() {
+        wasm.daliaengine_prev_preset(this.__wbg_ptr);
+    }
     /**
-     * Receives raw byte frequency data from the Web Audio API's AnalyserNode
-     * (values 0–255) and normalizes each sample to a f32 in the range [0.0, 1.0].
-     *
-     * This is the zero-copy entry point: JS passes a &[u8] view directly
-     * into WASM linear memory — no JSON, no serde.
      * @param {Uint8Array} frequency_data
      */
     process_audio(frequency_data) {
@@ -74,7 +117,7 @@ export class DaliaEngine {
         wasm.daliaengine_process_audio(this.__wbg_ptr, ptr0, len0);
     }
     /**
-     * Toggles the mashup mode to transition to the next preset.
+     * Legacy toggle for Mashup button – cycles forward
      */
     toggle_mashup() {
         wasm.daliaengine_toggle_mashup(this.__wbg_ptr);

@@ -1,16 +1,10 @@
 {
   "name": "dalia-ts",
-  "main": "dist/main.js",
-  "types": "dist/main.d.ts",
-  "files": [
-    "dist",
-    "../dalia-core/pkg"
-  ],
   "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build:wasm": "cd ../dalia-core && wasm-pack build --target web",
+    "build:wasm": "cd ../dalia-core && wasm-pack build --target web && cd ../dalia-ts && node -e \"const fs=require('fs'); ['dalia_core.js','dalia_core.d.ts','dalia_core_bg.wasm'].forEach(f=>fs.copyFileSync('../dalia-core/pkg/'+f,'src/wasm/'+f))\"",
     "build": "npm run build:wasm && tsc && vite build",
     "preview": "vite preview"
   },
@@ -21,7 +15,6 @@
     "vite": "^7.3.1"
   },
   "dependencies": {
-    "dalia-core": "file:../dalia-core/pkg",
     "three": "^0.183.2",
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.5.0"

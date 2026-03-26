@@ -1,47 +1,30 @@
 /* tslint:disable */
 /* eslint-disable */
 
-/**
- * The core audio processing engine for Dalia.
- * Receives raw frequency data from JavaScript and processes it
- * into a 3D vertex geometry buffer accessible via shared WASM memory.
- */
 export class DaliaEngine {
     free(): void;
     [Symbol.dispose](): void;
     /**
-     * Returns the length of the geometry buffer in floats (NUM_VERTICES * 3).
+     * Returns current preset index (0-5)
      */
+    current_preset_index(): number;
+    get_air(): number;
+    get_bass(): number;
+    get_energy(): number;
     get_geometry_len(): number;
-    /**
-     * Returns a raw pointer to the calculated 3D geometry buffer.
-     * JS will read a Float32Array of length NUM_VERTICES * 3.
-     */
     get_geometry_ptr(): number;
-    /**
-     * Returns the length of the processed data buffer.
-     */
+    get_mid(): number;
+    get_presence(): number;
     get_processed_data_len(): number;
-    /**
-     * Returns a raw pointer to the processed data buffer.
-     * JavaScript reads this pointer to create a Float32Array view
-     * directly into WASM linear memory (zero-copy read).
-     */
     get_processed_data_ptr(): number;
-    /**
-     * Creates a new DaliaEngine instance.
-     */
+    get_sub_bass(): number;
+    get_treb(): number;
     constructor();
-    /**
-     * Receives raw byte frequency data from the Web Audio API's AnalyserNode
-     * (values 0–255) and normalizes each sample to a f32 in the range [0.0, 1.0].
-     *
-     * This is the zero-copy entry point: JS passes a &[u8] view directly
-     * into WASM linear memory — no JSON, no serde.
-     */
+    next_preset(): void;
+    prev_preset(): void;
     process_audio(frequency_data: Uint8Array): void;
     /**
-     * Toggles the mashup mode to transition to the next preset.
+     * Legacy toggle for Mashup button – cycles forward
      */
     toggle_mashup(): void;
 }
@@ -51,11 +34,21 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_daliaengine_free: (a: number, b: number) => void;
+    readonly daliaengine_current_preset_index: (a: number) => number;
+    readonly daliaengine_get_air: (a: number) => number;
+    readonly daliaengine_get_bass: (a: number) => number;
+    readonly daliaengine_get_energy: (a: number) => number;
     readonly daliaengine_get_geometry_len: (a: number) => number;
     readonly daliaengine_get_geometry_ptr: (a: number) => number;
+    readonly daliaengine_get_mid: (a: number) => number;
+    readonly daliaengine_get_presence: (a: number) => number;
     readonly daliaengine_get_processed_data_len: (a: number) => number;
     readonly daliaengine_get_processed_data_ptr: (a: number) => number;
+    readonly daliaengine_get_sub_bass: (a: number) => number;
+    readonly daliaengine_get_treb: (a: number) => number;
     readonly daliaengine_new: () => number;
+    readonly daliaengine_next_preset: (a: number) => void;
+    readonly daliaengine_prev_preset: (a: number) => void;
     readonly daliaengine_process_audio: (a: number, b: number, c: number) => void;
     readonly daliaengine_toggle_mashup: (a: number) => void;
     readonly __wbindgen_externrefs: WebAssembly.Table;
