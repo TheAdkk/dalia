@@ -13,6 +13,8 @@ pub enum Preset {
     PlasmaField,
     FractalSpiral,
     HyperbolicParaboloid,
+    NebulaVortex,
+    ChaosRibbon,
 }
 
 impl Preset {
@@ -23,18 +25,22 @@ impl Preset {
             Preset::LissajousKnot       => Preset::PlasmaField,
             Preset::PlasmaField         => Preset::FractalSpiral,
             Preset::FractalSpiral       => Preset::HyperbolicParaboloid,
-            Preset::HyperbolicParaboloid => Preset::VectorSphere,
+            Preset::HyperbolicParaboloid => Preset::NebulaVortex,
+            Preset::NebulaVortex        => Preset::ChaosRibbon,
+            Preset::ChaosRibbon         => Preset::VectorSphere,
         }
     }
 
     pub fn prev(self) -> Preset {
         match self {
-            Preset::VectorSphere         => Preset::HyperbolicParaboloid,
+            Preset::VectorSphere         => Preset::ChaosRibbon,
             Preset::MutantTorus          => Preset::VectorSphere,
             Preset::LissajousKnot        => Preset::MutantTorus,
             Preset::PlasmaField          => Preset::LissajousKnot,
             Preset::FractalSpiral        => Preset::PlasmaField,
             Preset::HyperbolicParaboloid => Preset::FractalSpiral,
+            Preset::NebulaVortex         => Preset::HyperbolicParaboloid,
+            Preset::ChaosRibbon          => Preset::NebulaVortex,
         }
     }
 
@@ -46,17 +52,21 @@ impl Preset {
             Preset::PlasmaField          => 3,
             Preset::FractalSpiral        => 4,
             Preset::HyperbolicParaboloid => 5,
+            Preset::NebulaVortex         => 6,
+            Preset::ChaosRibbon          => 7,
         }
     }
 
     pub fn from_index(i: u32) -> Preset {
-        match i % 6 {
+        match i % 8 {
             0 => Preset::VectorSphere,
             1 => Preset::MutantTorus,
             2 => Preset::LissajousKnot,
             3 => Preset::PlasmaField,
             4 => Preset::FractalSpiral,
-            _ => Preset::HyperbolicParaboloid,
+            5 => Preset::HyperbolicParaboloid,
+            6 => Preset::NebulaVortex,
+            _ => Preset::ChaosRibbon,
         }
     }
 }
@@ -148,6 +158,8 @@ impl DaliaEngine {
     pub fn get_treb(&self)   -> f32 { self.treb }
     pub fn get_energy(&self) -> f32 { self.energy }
     pub fn get_sub_bass(&self) -> f32 { self.sub_bass }
+    pub fn get_low_mid(&self) -> f32 { self.low_mid }
+    pub fn get_upper_mid(&self) -> f32 { self.upper_mid }
     pub fn get_air(&self)    -> f32 { self.air }
     pub fn get_presence(&self) -> f32 { self.presence }
 
@@ -162,7 +174,7 @@ impl DaliaEngine {
         self.mashup_controller.start_transition(target);
     }
 
-    /// Returns current preset index (0-5)
+    /// Returns current preset index (0-7)
     pub fn current_preset_index(&self) -> u32 {
         self.mashup_controller.current_preset.index()
     }
@@ -266,6 +278,8 @@ impl DaliaEngine {
             Preset::PlasmaField          => self.vertex_plasma(index),
             Preset::FractalSpiral        => self.vertex_fractal_spiral(index),
             Preset::HyperbolicParaboloid => self.vertex_hyperbolic(index),
+            Preset::NebulaVortex         => self.vertex_nebula_vortex(index),
+            Preset::ChaosRibbon          => self.vertex_chaos_ribbon(index),
         }
     }
 
@@ -390,7 +404,6 @@ impl DaliaEngine {
 
     // ── (5) HyperbolicParaboloid — saddle surface rippling with all bands ─────
     fn vertex_hyperbolic(&self, index: usize) -> (f32, f32, f32) {
-        let f = index as f32;
         let n = NUM_VERTICES as f32;
 
         // Map to 2D grid
@@ -405,17 +418,71 @@ impl DaliaEngine {
         let saddle_z = (px * px - py * py) / (4.0 + self.bass * 4.0);
 
         // Layered wave interference on top
-        let wave1 = (px * (2.0 + self.treb * 4.0) + self.time * 2.0).sin()
+        let wave1 = (px * (2.0 + self.treb * 4.0) + self.time * 1.0).sin()
                   * self.treb * 0.8;
-        let wave2 = (py * (3.0 + self.presence * 3.0) - self.time * 1.5).cos()
+        let wave2 = (py * (3.0 + self.presence * 3.0) - self.time * 0.75).cos()
                   * self.presence * 0.6;
-        let wave3 = ((px * px + py * py).sqrt() * (1.5 + self.mid * 3.0) - self.time * 4.0).sin()
+        let wave3 = ((px * px + py * py).sqrt() * (1.5 + self.mid * 3.0) - self.time * 2.0).sin()
                   * self.mid * 1.0;
-        let wave4 = (px * 1.2 + py * 0.8 + self.time * 3.5).sin()
+        let wave4 = (px * 1.2 + py * 0.8 + self.time * 1.75).sin()
                   * self.sub_bass * 1.5;
 
         let z = saddle_z + wave1 + wave2 + wave3 + wave4;
         (px, py, z.clamp(-5.0, 5.0))
+    }
+
+    // ── (6) NebulaVortex — turbulent vertical vortex with spectral bursts ────
+    fn vertex_nebula_vortex(&self, index: usize) -> (f32, f32, f32) {
+        let f = index as f32;
+        let n = NUM_VERTICES as f32;
+        let t = (f / n) * std::f32::consts::TAU * 24.0;
+        let layer = f / n;
+
+        let radial = layer.powf(0.62) * (3.2 + self.energy * 4.0 + self.sub_bass * 1.8);
+        let swirl = t
+            + self.time * (0.7 + self.mid * 1.8)
+            + (radial * 2.6 + self.time * 2.0).sin() * (self.treb * 2.0 + self.presence * 0.6);
+
+        let mut x = swirl.cos() * radial;
+        let mut y = (layer - 0.5) * 11.0;
+        let mut z = swirl.sin() * radial;
+
+        let jet = (t * 2.0 + self.time * 3.5).sin() * (0.8 + self.upper_mid * 2.4);
+        let chaos = (t * 11.0 + self.time * 7.0).sin() * (0.2 + self.air * 1.3);
+
+        x += jet * 0.65 + chaos;
+        y += (t * 3.0 + self.time * 4.0).cos() * (self.air * 2.2 + self.treb * 1.1);
+        z += jet * 0.45 - chaos * 0.7 + self.sub_bass * (self.time * 2.4 + radial * 4.0).cos() * 1.5;
+
+        (x, y * 0.56, z)
+    }
+
+    // ── (7) ChaosRibbon — torn ribbon manifold with aggressive beat tears ────
+    fn vertex_chaos_ribbon(&self, index: usize) -> (f32, f32, f32) {
+        let f = index as f32;
+        let n = NUM_VERTICES as f32;
+        let u = (f / n) * std::f32::consts::TAU * 10.0;
+        let stripe = ((index % 280) as f32 / 280.0) * std::f32::consts::TAU;
+
+        let base = 2.0 + self.bass * 2.9 + self.sub_bass * 1.4;
+        let ripple = (u * 5.0 + self.time * 4.5).sin() * (0.7 + self.upper_mid * 2.1);
+        let thickness = 0.32 + self.treb * 1.8 + self.air * 0.9;
+
+        let angle = u + self.time * (0.5 + self.mid * 0.6);
+        let mut x = angle.cos() * (base + ripple) + (stripe * 3.0).sin() * thickness;
+        let mut y = (u * 0.5 + self.time * 1.3).sin() * (1.9 + self.mid * 2.2)
+            + (stripe + self.time * 2.4).cos() * thickness * 1.2;
+        let mut z = angle.sin() * (base + ripple) + (stripe * 2.0 + self.time * 3.3).sin() * thickness;
+
+        let tear_gate = (u * 7.0 + self.time * 2.0).sin().abs();
+        let tear = (u * 13.0 + self.time * 8.0).sin().signum() * self.presence * 1.1 * tear_gate;
+        let crackle = (u * 19.0 + self.time * 11.0).cos() * self.treb * 0.5;
+
+        x += tear + crackle;
+        y -= tear * 0.5;
+        z += tear * 0.8 - crackle * 0.4;
+
+        (x, y, z)
     }
 
     // ─── Memory accessors ─────────────────────────────────────────────────────

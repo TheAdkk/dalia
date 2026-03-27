@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { GlitchPass } from 'three/examples/jsm/postprocessing/GlitchPass.js';
 
 // ─── Preset metadata ─────────────────────────────────────────────────────────
 const PRESET_NAMES = [
@@ -14,14 +15,37 @@ const PRESET_NAMES = [
   'Plasma Field',
   'Fractal Spiral',
   'Hyperbolic Paraboloid',
+  'Nebula Vortex',
+  'Chaos Ribbon',
 ];
+
+const SPECTRAL_PALETTE = [
+  new THREE.Color('#08120A'), // Sub-Sonic
+  new THREE.Color('#18BF34'), // Bass
+  new THREE.Color('#B8E61F'), // Upper Bass
+  new THREE.Color('#FFB11A'), // Midrange
+  new THREE.Color('#FF6D0A'), // Upper Midrange
+  new THREE.Color('#FF1F1F'), // High End
+  new THREE.Color('#B30000'), // Super High
+  new THREE.Color('#2A0000'), // Super Sonic tail
+];
+const WHITE_POINT = new THREE.Color('#FFFFFF');
+const liveColor = new THREE.Color('#AA55FF');
+const spectralColor = new THREE.Color('#AA55FF');
 
 // ─── WASM + Audio State ───────────────────────────────────────────────────────
 let wasmModule: InitOutput;
 let engine: DaliaEngine;
+let leftEngine: DaliaEngine;
+let rightEngine: DaliaEngine;
 let audioCtx: AudioContext;
 let analyser: AnalyserNode;
+let leftAnalyser: AnalyserNode;
+let rightAnalyser: AnalyserNode;
 let dataArray: Uint8Array<ArrayBuffer>;
+let leftDataArray: Uint8Array<ArrayBuffer>;
+let rightDataArray: Uint8Array<ArrayBuffer>;
+let audioSampleRate = 44_100;
 let isAudioConnected = false;
 
 // ─── DOM Elements ─────────────────────────────────────────────────────────────
@@ -32,6 +56,10 @@ const playPauseBtn = document.getElementById('play-pause-btn')  as HTMLButtonEle
 const progressBar  = document.getElementById('progress-bar')    as HTMLInputElement;
 const timeCurrent  = document.getElementById('time-current')    as HTMLSpanElement;
 const timeTotal    = document.getElementById('time-total')      as HTMLSpanElement;
+const presetIndicator = document.getElementById('preset-indicator') as HTMLSpanElement;
+const trackIndicator = document.getElementById('track-indicator') as HTMLSpanElement;
+const loadTrackBtn = document.getElementById('load-track-btn') as HTMLButtonElement;
+const trackFileInput = document.getElementById('track-file-input') as HTMLInputElement;
 
 // ─── Recording State ──────────────────────────────────────────────────────────
 let mediaRecorder: MediaRecorder | null = null;
@@ -43,11 +71,36 @@ let renderer:       THREE.WebGLRenderer;
 let camera:         THREE.PerspectiveCamera;
 let scene:          THREE.Scene;
 let geometry:       THREE.BufferGeometry;
+let leftGeometry:   THREE.BufferGeometry;
+let rightGeometry:  THREE.BufferGeometry;
 let composer:       EffectComposer;
 let bloomPass:      UnrealBloomPass;
+let glitchPass:     GlitchPass;
 let pointsMaterial: THREE.PointsMaterial;
 let points:         THREE.Points;
+let centerAccentMaterial: THREE.PointsMaterial;
+let centerAccentPoints: THREE.Points;
+let leftPointsMaterial: THREE.PointsMaterial;
+let rightPointsMaterial: THREE.PointsMaterial;
+let leftPoints:     THREE.Points;
+let rightPoints:    THREE.Points;
+let leftAccentMaterial: THREE.PointsMaterial;
+let rightAccentMaterial: THREE.PointsMaterial;
+let leftAccentPoints: THREE.Points;
+let rightAccentPoints: THREE.Points;
+let textureMaterial: THREE.PointsMaterial;
+let texturePoints:   THREE.Points;
 let wasmMemoryView: Float32Array;
+let leftWasmMemoryView: Float32Array;
+let rightWasmMemoryView: Float32Array;
+let noiseMaterial: THREE.PointsMaterial;
+let noisePoints: THREE.Points;
+let sparkRingMaterial: THREE.PointsMaterial;
+let sparkRingPoints: THREE.Points;
+let waveformGeometry: THREE.BufferGeometry;
+let waveformMaterial: THREE.LineBasicMaterial;
+let waveformLine: THREE.Line;
+let waveformPositions: Float32Array;
 
 // ─── Camera choreography state ────────────────────────────────────────────────
 let camOrbitAngle = 0;
@@ -55,13 +108,42 @@ let camZoomBase   = 8;
 let camZoomTarget = 8;
 
 // ─── Color hue accumulator ────────────────────────────────────────────────────
-let hueAccum = 0;
 let energyFast = 0;
 let energySlow = 0;
 let transientPulse = 0;
+let glitchBurst = 0;
+let spectralFluxFast = 0;
+let spectralFluxSlow = 0;
+let spectralFluxGate = 0;
+let feedbackWarp = 0;
+let stereoWidthSmooth = 0;
+let stereoBalanceSmooth = 0.5;
+let leftEnergySmooth = 0;
+let rightEnergySmooth = 0;
+let prevSpectrum: Float32Array | null = null;
+let momentaryLoudnessDb = -60;
+let shortTermLoudnessDb = -60;
+let integratedLoudnessDb = -60;
+let loudnessPeakDb = -60;
+let loudnessFloorDb = -60;
+let dynamicRangeVisual = 0;
+let plrVisual = 0;
 
-// ─── Preset label overlay ─────────────────────────────────────────────────────
-let labelTimeout: number | null = null;
+const LEFT_TINT = new THREE.Color('#32D7FF');
+const RIGHT_TINT = new THREE.Color('#FF9A36');
+const leftLiveColor = new THREE.Color('#32D7FF');
+const rightLiveColor = new THREE.Color('#FF9A36');
+const accentColorA = new THREE.Color('#FFD84A');
+const accentColorB = new THREE.Color('#7A42FF');
+
+// ─── Mashup mode state ───────────────────────────────────────────────────────
+const MASHUP_INTERVAL_MS = 15_000;
+let mashupEnabled = false;
+let mashupIntervalId: number | null = null;
+let mashupBtnRef: HTMLButtonElement | null = null;
+const DEFAULT_TRACK_NAME = 'test_music.opus';
+let customTrackUrl: string | null = null;
+let presetFlashTimeout: number | null = null;
 
 // ─── WebGL & Three.js Setup ───────────────────────────────────────────────────
 function setupWebGL() {
@@ -70,7 +152,7 @@ function setupWebGL() {
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setClearColor(0x000000, 1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.82;
+  renderer.toneMappingExposure = 0.68;
 
   scene = new THREE.Scene();
 
@@ -78,24 +160,187 @@ function setupWebGL() {
   camera.position.set(0, 2, 8);
   camera.lookAt(0, 0, 0);
 
-  // Zero-copy link to WASM geometry buffer
-  const ptr = engine.get_geometry_ptr();
+  // Zero-copy links for center/left/right engines
+  const centerPtr = engine.get_geometry_ptr();
+  const leftPtr = leftEngine.get_geometry_ptr();
+  const rightPtr = rightEngine.get_geometry_ptr();
   const len = engine.get_geometry_len();
-  wasmMemoryView = new Float32Array(wasmModule.memory.buffer, ptr, len);
+  wasmMemoryView = new Float32Array(wasmModule.memory.buffer, centerPtr, len);
+  leftWasmMemoryView = new Float32Array(wasmModule.memory.buffer, leftPtr, len);
+  rightWasmMemoryView = new Float32Array(wasmModule.memory.buffer, rightPtr, len);
 
   geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(wasmMemoryView, 3));
+  leftGeometry = new THREE.BufferGeometry();
+  leftGeometry.setAttribute('position', new THREE.BufferAttribute(leftWasmMemoryView, 3));
+  rightGeometry = new THREE.BufferGeometry();
+  rightGeometry.setAttribute('position', new THREE.BufferAttribute(rightWasmMemoryView, 3));
 
   pointsMaterial = new THREE.PointsMaterial({
     color:       0xaa55ff,
     size:        0.05,
     blending:    THREE.AdditiveBlending,
     transparent: true,
-    opacity:     0.85,
+    opacity:     0.62,
   });
 
   points = new THREE.Points(geometry, pointsMaterial);
   scene.add(points);
+
+  centerAccentMaterial = new THREE.PointsMaterial({
+    color:       0xffd84a,
+    size:        0.031,
+    blending:    THREE.AdditiveBlending,
+    transparent: true,
+    opacity:     0.16,
+    depthWrite:  false,
+  });
+  centerAccentPoints = new THREE.Points(geometry, centerAccentMaterial);
+  scene.add(centerAccentPoints);
+
+  leftPointsMaterial = new THREE.PointsMaterial({
+    color:       0x55d2ff,
+    size:        0.043,
+    blending:    THREE.AdditiveBlending,
+    transparent: true,
+    opacity:     0.34,
+    depthWrite:  false,
+  });
+  rightPointsMaterial = new THREE.PointsMaterial({
+    color:       0xff9a55,
+    size:        0.043,
+    blending:    THREE.AdditiveBlending,
+    transparent: true,
+    opacity:     0.34,
+    depthWrite:  false,
+  });
+
+  leftPoints = new THREE.Points(leftGeometry, leftPointsMaterial);
+  rightPoints = new THREE.Points(rightGeometry, rightPointsMaterial);
+  leftPoints.position.x = -2.4;
+  rightPoints.position.x = 2.4;
+  scene.add(leftPoints);
+  scene.add(rightPoints);
+
+  leftAccentMaterial = new THREE.PointsMaterial({
+    color:       0xb8e61f,
+    size:        0.027,
+    blending:    THREE.AdditiveBlending,
+    transparent: true,
+    opacity:     0.12,
+    depthWrite:  false,
+  });
+  rightAccentMaterial = new THREE.PointsMaterial({
+    color:       0xff6d0a,
+    size:        0.027,
+    blending:    THREE.AdditiveBlending,
+    transparent: true,
+    opacity:     0.12,
+    depthWrite:  false,
+  });
+  leftAccentPoints = new THREE.Points(leftGeometry, leftAccentMaterial);
+  rightAccentPoints = new THREE.Points(rightGeometry, rightAccentMaterial);
+  leftAccentPoints.position.x = -2.4;
+  rightAccentPoints.position.x = 2.4;
+  scene.add(leftAccentPoints);
+  scene.add(rightAccentPoints);
+
+  // Depth texture layer: distant particles to add volume/parallax
+  const textureCount = 4200;
+  const texturePositions = new Float32Array(textureCount * 3);
+  for (let i = 0; i < textureCount; i++) {
+    const i3 = i * 3;
+    const radius = 8 + Math.random() * 18;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos((Math.random() * 2) - 1);
+    texturePositions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+    texturePositions[i3 + 1] = radius * Math.cos(phi);
+    texturePositions[i3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+  }
+
+  const textureGeometry = new THREE.BufferGeometry();
+  textureGeometry.setAttribute('position', new THREE.BufferAttribute(texturePositions, 3));
+  textureMaterial = new THREE.PointsMaterial({
+    color: 0x88aaff,
+    size: 0.018,
+    transparent: true,
+    opacity: 0.09,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  texturePoints = new THREE.Points(textureGeometry, textureMaterial);
+  scene.add(texturePoints);
+
+  const noiseCount = 6500;
+  const noisePositions = new Float32Array(noiseCount * 3);
+  for (let i = 0; i < noiseCount; i++) {
+    const i3 = i * 3;
+    const spread = 26;
+    noisePositions[i3] = (Math.random() - 0.5) * spread;
+    noisePositions[i3 + 1] = (Math.random() - 0.5) * spread * 0.8;
+    noisePositions[i3 + 2] = (Math.random() - 0.5) * spread;
+  }
+  const noiseGeometry = new THREE.BufferGeometry();
+  noiseGeometry.setAttribute('position', new THREE.BufferAttribute(noisePositions, 3));
+  noiseMaterial = new THREE.PointsMaterial({
+    color:       0x8a8a8a,
+    size:        0.01,
+    blending:    THREE.AdditiveBlending,
+    transparent: true,
+    opacity:     0.06,
+    depthWrite:  false,
+  });
+  noisePoints = new THREE.Points(noiseGeometry, noiseMaterial);
+  scene.add(noisePoints);
+
+  const ringPoints = 220;
+  const ringPositions = new Float32Array(ringPoints * 3);
+  for (let i = 0; i < ringPoints; i++) {
+    const a = (i / ringPoints) * Math.PI * 2;
+    const i3 = i * 3;
+    ringPositions[i3] = Math.cos(a);
+    ringPositions[i3 + 1] = Math.sin(a) * 0.4;
+    ringPositions[i3 + 2] = Math.sin(a);
+  }
+  const ringGeometry = new THREE.BufferGeometry();
+  ringGeometry.setAttribute('position', new THREE.BufferAttribute(ringPositions, 3));
+  sparkRingMaterial = new THREE.PointsMaterial({
+    color:       0xffd84a,
+    size:        0.03,
+    blending:    THREE.AdditiveBlending,
+    transparent: true,
+    opacity:     0.0,
+    depthWrite:  false,
+  });
+  sparkRingPoints = new THREE.Points(ringGeometry, sparkRingMaterial);
+  sparkRingPoints.visible = true;
+  sparkRingPoints.scale.set(0.2, 0.2, 0.2);
+  scene.add(sparkRingPoints);
+
+  const waveformSegments = 192;
+  waveformPositions = new Float32Array(waveformSegments * 3);
+  for (let i = 0; i < waveformSegments; i++) {
+    const i3 = i * 3;
+    const x = ((i / (waveformSegments - 1)) - 0.5) * 6.8;
+    waveformPositions[i3] = x;
+    waveformPositions[i3 + 1] = 0;
+    waveformPositions[i3 + 2] = 0;
+  }
+
+  waveformGeometry = new THREE.BufferGeometry();
+  waveformGeometry.setAttribute('position', new THREE.BufferAttribute(waveformPositions, 3));
+  waveformMaterial = new THREE.LineBasicMaterial({
+    color: 0x8dc9ff,
+    transparent: true,
+    opacity: 0.0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  waveformLine = new THREE.Line(waveformGeometry, waveformMaterial);
+  waveformLine.position.set(0, -1.35, 0.35);
+  scene.add(waveformLine);
+
+  scene.fog = new THREE.FogExp2(0x000000, 0.03);
 
   // Post-processing: Neon Bloom
   const renderScene = new RenderPass(scene, camera);
@@ -107,6 +352,10 @@ function setupWebGL() {
   composer = new EffectComposer(renderer);
   composer.addPass(renderScene);
   composer.addPass(bloomPass);
+
+  glitchPass = new GlitchPass();
+  glitchPass.enabled = false;
+  composer.addPass(glitchPass);
 }
 
 function resizeCanvas() {
@@ -117,47 +366,129 @@ function resizeCanvas() {
   composer.setSize(window.innerWidth, window.innerHeight);
 }
 
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+
+function averageBand(
+  data: Uint8Array<ArrayBuffer>,
+  fromHz: number,
+  toHz: number,
+  sampleRate: number,
+  fftSize: number,
+): number {
+  const binCount = Math.min(data.length, Math.max(1, Math.floor(fftSize / 2)));
+  const hzPerBin = sampleRate / (2 * binCount);
+  const from = Math.max(0, Math.min(binCount - 1, Math.floor(fromHz / hzPerBin)));
+  const to = Math.max(from + 1, Math.min(binCount, Math.ceil(toHz / hzPerBin)));
+
+  let sum = 0;
+  for (let i = from; i < to; i++) {
+    sum += data[i] / 255;
+  }
+  return sum / (to - from);
+}
+
 // ─── Audio Setup ──────────────────────────────────────────────────────────────
 function connectAudio() {
   if (isAudioConnected) return;
   audioCtx = new AudioContext();
+  audioSampleRate = audioCtx.sampleRate;
+
   analyser = audioCtx.createAnalyser();
+  leftAnalyser = audioCtx.createAnalyser();
+  rightAnalyser = audioCtx.createAnalyser();
   analyser.fftSize               = 2048; // Higher resolution
   analyser.smoothingTimeConstant = 0.75;
+  leftAnalyser.fftSize               = 2048;
+  rightAnalyser.fftSize              = 2048;
+  leftAnalyser.smoothingTimeConstant = 0.72;
+  rightAnalyser.smoothingTimeConstant= 0.72;
 
   const source = audioCtx.createMediaElementSource(audioEl);
+  const splitter = audioCtx.createChannelSplitter(2);
+
   source.connect(analyser);
+  source.connect(splitter);
+  splitter.connect(leftAnalyser, 0);
+  splitter.connect(rightAnalyser, 1);
   analyser.connect(audioCtx.destination);
 
   audioDestination = audioCtx.createMediaStreamDestination();
   analyser.connect(audioDestination);
 
   dataArray = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount)); // 1024 bins
+  leftDataArray = new Uint8Array(new ArrayBuffer(leftAnalyser.frequencyBinCount));
+  rightDataArray = new Uint8Array(new ArrayBuffer(rightAnalyser.frequencyBinCount));
   isAudioConnected = true;
   recordBtn.disabled = false;
 }
 
 // ─── Preset navigation ────────────────────────────────────────────────────────
-function showPresetLabel(name: string) {
-  const label = document.getElementById('preset-label')!;
-  label.textContent  = name;
-  label.style.opacity = '1';
-  if (labelTimeout !== null) clearTimeout(labelTimeout);
-  labelTimeout = window.setTimeout(() => {
-    label.style.opacity = '0';
-  }, 2200);
+function flashPresetIndicator() {
+  presetIndicator.classList.add('changed');
+  if (presetFlashTimeout !== null) window.clearTimeout(presetFlashTimeout);
+  presetFlashTimeout = window.setTimeout(() => {
+    presetIndicator.classList.remove('changed');
+  }, 680);
+}
+
+function syncPresetIndicator() {
+  const idx = engine.current_preset_index();
+  const baseName = PRESET_NAMES[idx] ?? PRESET_NAMES[0];
+  const mashupTag = mashupEnabled ? ' · AUTO 15s' : '';
+  presetIndicator.textContent = `Preset: ${baseName}${mashupTag}`;
+  flashPresetIndicator();
+}
+
+function setTrackIndicator(trackName: string, isCustomTrack: boolean) {
+  trackIndicator.textContent = isCustomTrack
+    ? `Track: ${trackName}`
+    : `Track: ${trackName} (default)`;
 }
 
 function goNextPreset() {
   engine.next_preset();
-  const idx = engine.current_preset_index();
-  showPresetLabel(PRESET_NAMES[idx] ?? '');
+  leftEngine.next_preset();
+  rightEngine.next_preset();
+  syncPresetIndicator();
+
+  if (mashupEnabled) {
+    if (mashupIntervalId !== null) window.clearInterval(mashupIntervalId);
+    mashupIntervalId = window.setInterval(() => goNextPreset(), MASHUP_INTERVAL_MS);
+  }
 }
 
 function goPrevPreset() {
   engine.prev_preset();
-  const idx = engine.current_preset_index();
-  showPresetLabel(PRESET_NAMES[idx] ?? '');
+  leftEngine.prev_preset();
+  rightEngine.prev_preset();
+  syncPresetIndicator();
+
+  if (mashupEnabled) {
+    if (mashupIntervalId !== null) window.clearInterval(mashupIntervalId);
+    mashupIntervalId = window.setInterval(() => goNextPreset(), MASHUP_INTERVAL_MS);
+  }
+}
+
+function setMashupMode(enabled: boolean) {
+  mashupEnabled = enabled;
+
+  if (mashupIntervalId !== null) {
+    window.clearInterval(mashupIntervalId);
+    mashupIntervalId = null;
+  }
+
+  if (mashupEnabled) {
+    mashupIntervalId = window.setInterval(() => goNextPreset(), MASHUP_INTERVAL_MS);
+  }
+
+  if (mashupBtnRef) {
+    mashupBtnRef.classList.toggle('active', mashupEnabled);
+    mashupBtnRef.title = mashupEnabled ? 'Mashup Auto (ON)' : 'Mashup Auto (OFF)';
+  }
+
+  syncPresetIndicator();
 }
 
 // ─── Render Loop ─────────────────────────────────────────────────────────────
@@ -171,71 +502,254 @@ function renderLoop() {
 
   // 1. Pull frequency data from Web Audio API
   analyser.getByteFrequencyData(dataArray);
+  leftAnalyser.getByteFrequencyData(leftDataArray);
+  rightAnalyser.getByteFrequencyData(rightDataArray);
 
-  // 2. Send to Rust — computes geometry + updates 8-band analysis
+  // Spectral flux onset detector (frame-to-frame positive deltas)
+  if (!prevSpectrum || prevSpectrum.length !== dataArray.length) {
+    prevSpectrum = new Float32Array(dataArray.length);
+  }
+  let fluxRaw = 0;
+  for (let i = 0; i < dataArray.length; i++) {
+    const mag = dataArray[i] / 255;
+    const delta = mag - prevSpectrum[i];
+    if (delta > 0) fluxRaw += delta;
+    prevSpectrum[i] = mag;
+  }
+  fluxRaw /= dataArray.length;
+  spectralFluxFast += (fluxRaw - spectralFluxFast) * 0.4;
+  spectralFluxSlow += (fluxRaw - spectralFluxSlow) * 0.04;
+  const fluxTransient = Math.max(0, spectralFluxFast - spectralFluxSlow);
+  const fluxTarget = clamp01((fluxTransient - 0.003) / 0.03);
+  spectralFluxGate += (fluxTarget - spectralFluxGate) * 0.24;
+
+  // 2. Send to Rust engines — center mix + pure left + pure right
   engine.process_audio(dataArray);
+  leftEngine.process_audio(leftDataArray);
+  rightEngine.process_audio(rightDataArray);
 
-  // 3. Mark geometry as dirty (zero-copy shared buffer)
+  // 3. Mark geometries as dirty (zero-copy shared buffers)
   geometry.attributes.position.needsUpdate = true;
+  leftGeometry.attributes.position.needsUpdate = true;
+  rightGeometry.attributes.position.needsUpdate = true;
 
   // ── Read live audio metrics from WASM ─────────────────────────────────────
   const bass    = engine.get_bass();
+  const lowMid  = engine.get_low_mid();
   const mid     = engine.get_mid();
+  const upperMid= engine.get_upper_mid();
   const treb    = engine.get_treb();
   const energy  = engine.get_energy();
   const subBass = engine.get_sub_bass();
   const presence= engine.get_presence();
   const air     = engine.get_air();
 
+  const under150Left = averageBand(leftDataArray, 20, 150, audioSampleRate, leftAnalyser.fftSize);
+  const under150Right = averageBand(rightDataArray, 20, 150, audioSampleRate, rightAnalyser.fftSize);
+  const fullLeft = averageBand(leftDataArray, 20, 12_000, audioSampleRate, leftAnalyser.fftSize);
+  const fullRight = averageBand(rightDataArray, 20, 12_000, audioSampleRate, rightAnalyser.fftSize);
+
+  leftEnergySmooth += (fullLeft - leftEnergySmooth) * 0.16;
+  rightEnergySmooth += (fullRight - rightEnergySmooth) * 0.16;
+
+  const stereoWidthRaw = Math.abs(fullLeft - fullRight);
+  stereoWidthSmooth += (stereoWidthRaw - stereoWidthSmooth) * 0.14;
+
+  const rawBalance = clamp01(0.5 + (fullRight - fullLeft) * 0.95);
+  stereoBalanceSmooth += (rawBalance - stereoBalanceSmooth) * 0.12;
+
+  const stereoRms = Math.sqrt((fullLeft * fullLeft + fullRight * fullRight) * 0.5);
+  const momentaryDbRaw = 20 * Math.log10(Math.max(stereoRms, 0.0001));
+  momentaryLoudnessDb += (momentaryDbRaw - momentaryLoudnessDb) * 0.22;
+  shortTermLoudnessDb += (momentaryDbRaw - shortTermLoudnessDb) * 0.05;
+  integratedLoudnessDb += (momentaryDbRaw - integratedLoudnessDb) * 0.012;
+
+  loudnessPeakDb = Math.max(loudnessPeakDb * 0.996, momentaryLoudnessDb);
+  if (momentaryLoudnessDb < loudnessFloorDb) {
+    loudnessFloorDb = momentaryLoudnessDb;
+  } else {
+    loudnessFloorDb += (momentaryLoudnessDb - loudnessFloorDb) * 0.002;
+  }
+
+  const lraDb = Math.max(0, loudnessPeakDb - loudnessFloorDb);
+  const plrDb = Math.max(0, loudnessPeakDb - integratedLoudnessDb);
+  dynamicRangeVisual += (clamp01((lraDb - 5) / 16) - dynamicRangeVisual) * 0.08;
+  plrVisual += (clamp01((plrDb - 4) / 14) - plrVisual) * 0.08;
+  const loudnessVisual = clamp01((momentaryLoudnessDb + 44) / 32);
+  const loudnessDrift = clamp01((shortTermLoudnessDb - integratedLoudnessDb + 8) / 16);
+
   energyFast += (energy - energyFast) * 0.22;
   energySlow += (energy - energySlow) * 0.035;
   const transient = Math.max(0, energyFast - energySlow);
-  transientPulse += (transient * 2.2 + subBass * 0.25 - transientPulse) * 0.18;
+  transientPulse += (transient * 2.2 + subBass * 0.25 + spectralFluxGate * 0.5 - transientPulse) * 0.18;
   const pulse = Math.min(transientPulse, 1.0);
+  const time = performance.now() * 0.0003;
 
-  // ── Audio-reactive HSL color cycling ─────────────────────────────────────
-  // Hue drifts with controlled speed and speeds up with transients
-  hueAccum += 0.00055 + treb * 0.006 + presence * 0.0025 + pulse * 0.0015;
-  if (hueAccum > 1) hueAccum -= 1;
+  // Stereo-aware low-end gate (<150Hz across L/R)
+  const under150HzStereo = Math.max(under150Left, under150Right);
+  const lowGate = clamp01((under150HzStereo - 0.26) / 0.56);
+  glitchBurst = Math.max(glitchBurst * 0.96, lowGate * 0.58 + transient * 0.42 + subBass * 0.18 + spectralFluxGate * 0.18);
 
-  // Keep saturation vivid but avoid clipping highlights
-  const saturation = Math.min(0.85, 0.52 + bass * 0.22 + presence * 0.08);
-  // Lower lightness ceiling to preserve details and avoid eye strain
-  const lightness  = Math.min(0.5, 0.24 + energy * 0.16 + mid * 0.07 + pulse * 0.05);
-  pointsMaterial.color.setHSL(hueAccum, saturation, lightness);
-  pointsMaterial.opacity = Math.max(0.32, Math.min(0.72, 0.45 + presence * 0.2 + air * 0.06 - pulse * 0.08));
+  // ── Spectral color mapping (Sub-Sonic -> Super Sonic) ───────────────────
+  const spectralBands = [subBass, bass, lowMid, mid, upperMid, presence, treb, air];
+  let weighted = 0;
+  let total = 0;
+  for (let i = 0; i < spectralBands.length; i++) {
+    const value = Math.max(0.0001, spectralBands[i]);
+    weighted += i * value;
+    total += value;
+  }
+  const centroid = total > 0 ? (weighted / total) : 0;
+  const paletteIndex = Math.max(0, Math.min(SPECTRAL_PALETTE.length - 1, Math.round(centroid)));
+  const nextPaletteIndex = Math.max(0, Math.min(SPECTRAL_PALETTE.length - 1, paletteIndex + (stereoBalanceSmooth > 0.5 ? 1 : -1)));
+  const accentMix = clamp01(0.16 + stereoWidthSmooth * 0.34 + pulse * 0.12);
+  spectralColor.lerp(SPECTRAL_PALETTE[paletteIndex], 0.16);
+
+  const whiteMix = Math.max(0.02, Math.min(0.16, energy * 0.12 + pulse * 0.08 + transient * 0.05 + spectralFluxGate * 0.03));
+  liveColor.copy(spectralColor).lerp(WHITE_POINT, whiteMix);
+  pointsMaterial.color.lerp(liveColor, 0.14);
+
+  centerAccentMaterial.color.copy(SPECTRAL_PALETTE[nextPaletteIndex]).lerp(accentColorB, accentMix * 0.2);
+  centerAccentMaterial.opacity = clamp01(0.05 + plrVisual * 0.12 + stereoWidthSmooth * 0.08);
+  centerAccentMaterial.size = Math.max(0.014, pointsMaterial.size * (0.62 + pulse * 0.16));
+
+  leftLiveColor.copy(spectralColor).lerp(LEFT_TINT, clamp01(0.14 + stereoWidthSmooth * 0.42 + leftEnergySmooth * 0.18));
+  rightLiveColor.copy(spectralColor).lerp(RIGHT_TINT, clamp01(0.14 + stereoWidthSmooth * 0.42 + rightEnergySmooth * 0.18));
+  leftPointsMaterial.color.lerp(leftLiveColor, 0.16);
+  rightPointsMaterial.color.lerp(rightLiveColor, 0.16);
+
+  leftAccentMaterial.color.copy(SPECTRAL_PALETTE[Math.max(0, paletteIndex - 1)]).lerp(accentColorA, clamp01(0.2 + leftEnergySmooth * 0.4));
+  rightAccentMaterial.color.copy(SPECTRAL_PALETTE[Math.min(SPECTRAL_PALETTE.length - 1, paletteIndex + 1)]).lerp(accentColorA, clamp01(0.2 + rightEnergySmooth * 0.4));
+  leftAccentMaterial.opacity = clamp01(0.05 + leftEnergySmooth * 0.14 + stereoWidthSmooth * 0.08);
+  rightAccentMaterial.opacity = clamp01(0.05 + rightEnergySmooth * 0.14 + stereoWidthSmooth * 0.08);
+
+  textureMaterial.color.lerp(spectralColor, 0.1);
+  pointsMaterial.opacity = Math.max(0.26, Math.min(0.62, 0.36 + presence * 0.1 + air * 0.05 + pulse * 0.03));
+  leftPointsMaterial.opacity = clamp01(0.08 + leftEnergySmooth * 0.2 + stereoWidthSmooth * 0.16);
+  rightPointsMaterial.opacity = clamp01(0.08 + rightEnergySmooth * 0.2 + stereoWidthSmooth * 0.16);
+
+  renderer.toneMappingExposure = Math.max(0.58, Math.min(0.86, 0.62 + loudnessVisual * 0.16 + dynamicRangeVisual * 0.05 + spectralFluxGate * 0.03));
 
   // ── Particle size modulation (bass-driven) ────────────────────────────────
   // Sub-bass gives body, transients add short accents
   const targetSize = 0.018 + bass * 0.05 + subBass * 0.035 + treb * 0.01 + pulse * 0.02;
   pointsMaterial.size += (targetSize - pointsMaterial.size) * 0.12;
 
+  const panShift = (stereoBalanceSmooth - 0.5) * 1.2;
+  points.position.x = panShift * 0.24;
+  leftPoints.position.x = -2.35 + panShift * 0.45;
+  rightPoints.position.x = 2.35 + panShift * 0.45;
+
+  leftPointsMaterial.size = Math.max(0.01, pointsMaterial.size * (0.74 + leftEnergySmooth * 0.34 + stereoWidthSmooth * 0.14));
+  rightPointsMaterial.size = Math.max(0.01, pointsMaterial.size * (0.74 + rightEnergySmooth * 0.34 + stereoWidthSmooth * 0.14));
+  leftAccentPoints.position.x = leftPoints.position.x;
+  rightAccentPoints.position.x = rightPoints.position.x;
+  centerAccentPoints.position.x = points.position.x;
+
+  // ── Texture + depth layer ────────────────────────────────────────────────
+  texturePoints.rotation.y += 0.0002 + air * 0.001 + pulse * 0.0005;
+  texturePoints.rotation.x  = Math.sin(time * 0.22) * 0.18;
+  texturePoints.position.z += ((-0.8 - energy * 1.8) - texturePoints.position.z) * 0.05;
+  textureMaterial.opacity   = Math.max(0.03, Math.min(0.16, 0.06 + air * 0.05 + pulse * 0.02 + dynamicRangeVisual * 0.04));
+  textureMaterial.size      = Math.max(0.01, Math.min(0.04, 0.014 + air * 0.012 + pulse * 0.008 + plrVisual * 0.006));
+  if (scene.fog instanceof THREE.FogExp2) {
+    scene.fog.density = Math.max(0.01, Math.min(0.05, 0.018 + energy * 0.012 + pulse * 0.006 + dynamicRangeVisual * 0.008));
+  }
+
+  noisePoints.rotation.y += 0.00008 + air * 0.00045;
+  noisePoints.rotation.x = Math.sin(time * 0.12) * 0.08;
+  noiseMaterial.opacity = Math.max(0.03, Math.min(0.14, 0.04 + air * 0.05 + stereoWidthSmooth * 0.04));
+  noiseMaterial.size = Math.max(0.006, Math.min(0.02, 0.008 + pulse * 0.006 + air * 0.004));
+  noiseMaterial.color.copy(spectralColor).lerp(WHITE_POINT, 0.06);
+
+  const sparkGate = clamp01((under150HzStereo - 0.24) / 0.36);
+  sparkRingPoints.scale.setScalar(Math.max(0.2, 0.8 + sparkGate * 2.4 + pulse * 0.7));
+  sparkRingMaterial.opacity = clamp01(0.02 + sparkGate * 0.18 + transient * 0.08);
+  sparkRingMaterial.size = Math.max(0.018, Math.min(0.052, 0.022 + sparkGate * 0.03 + pulse * 0.01));
+  sparkRingMaterial.color.copy(spectralColor).lerp(accentColorA, 0.35 + sparkGate * 0.2);
+
+  // Waveform overlay: low-cost temporal shape layer gated by spectral flux
+  const waveAttr = waveformGeometry.getAttribute('position') as THREE.BufferAttribute;
+  const waveCount = waveAttr.count;
+  const binStep = Math.max(1, Math.floor(dataArray.length / waveCount));
+  const waveAmp = 0.35 + energy * 0.85 + spectralFluxGate * 1.0;
+  for (let i = 0; i < waveCount; i++) {
+    const i3 = i * 3;
+    const x = ((i / (waveCount - 1)) - 0.5) * 6.8;
+    const sample = dataArray[Math.min(dataArray.length - 1, i * binStep)] / 255;
+    const y = (sample - 0.5) * waveAmp * 2.4;
+    waveformPositions[i3] = x;
+    waveformPositions[i3 + 1] = y;
+    waveformPositions[i3 + 2] = Math.sin((i * 0.11) + time * 1.8) * (0.08 + feedbackWarp * 0.16);
+  }
+  waveAttr.needsUpdate = true;
+  waveformMaterial.opacity = clamp01(0.05 + energy * 0.22 + spectralFluxGate * 0.42);
+  waveformMaterial.color.copy(spectralColor).lerp(WHITE_POINT, 0.18 + spectralFluxGate * 0.2);
+  waveformLine.position.y = -1.38 + subBass * 0.32 + pulse * 0.16;
+  waveformLine.rotation.y = (stereoBalanceSmooth - 0.5) * 0.25;
+
+  // Basic feedback warp: smooth scene-space distortion tied to musical energy
+  const warpTarget = clamp01(mid * 0.55 + presence * 0.45 + spectralFluxGate * 0.65 + stereoWidthSmooth * 0.45);
+  feedbackWarp += (warpTarget - feedbackWarp) * 0.11;
+  const warpX = Math.sin(time * (0.9 + feedbackWarp * 0.8)) * feedbackWarp;
+  const warpY = Math.cos(time * (0.7 + feedbackWarp * 0.6)) * feedbackWarp;
+  texturePoints.position.x = warpX * 1.8;
+  texturePoints.position.y = warpY * 1.3;
+  noisePoints.position.x = -warpX * 0.9;
+  noisePoints.position.z = -0.2 + warpY * 2.1;
+
   // ── Dynamic bloom (energy flares on drops) ────────────────────────────
   // Constrained bloom to avoid blown-out frames
-  const targetBloom = Math.max(0.22, Math.min(0.72, 0.24 + subBass * 0.24 + energy * 0.14 + pulse * 0.18 + air * 0.06));
+  const targetBloom = Math.max(0.18, Math.min(0.72, 0.22 + subBass * 0.2 + energy * 0.12 + pulse * 0.12 + air * 0.05 + dynamicRangeVisual * 0.04 + plrVisual * 0.05 + loudnessDrift * 0.03 + glitchBurst * 0.02 + spectralFluxGate * 0.03));
   bloomPass.strength += (targetBloom - bloomPass.strength) * 0.06;
-  bloomPass.radius    = Math.max(0.1, Math.min(0.36, 0.12 + treb * 0.16 + pulse * 0.08));
-  bloomPass.threshold = Math.max(0.12, Math.min(0.34, 0.2 + (1.0 - energy) * 0.15 - pulse * 0.07));
+  bloomPass.radius    = Math.max(0.08, Math.min(0.32, 0.1 + treb * 0.12 + pulse * 0.08 + plrVisual * 0.04 + glitchBurst * 0.015));
+  bloomPass.threshold = Math.max(0.14, Math.min(0.4, 0.24 + (1.0 - energy) * 0.09 - pulse * 0.04 - dynamicRangeVisual * 0.02 - glitchBurst * 0.01));
+  bloomPass.strength = Math.min(bloomPass.strength, 0.68);
 
   // ── Camera choreography ───────────────────────────────────────────────────
-  const time = performance.now() * 0.0003;
   camOrbitAngle += 0.0016 + mid * 0.0028 + pulse * 0.0012;
 
   // Bass-triggered zoom pulses toward the geometry
-  camZoomTarget = 8.2 - subBass * 1.2 - bass * 0.8 - pulse * 0.6;
+  camZoomTarget = 8.28 - subBass * 0.86 - bass * 0.56 - pulse * 0.34 - dynamicRangeVisual * 0.22 - plrVisual * 0.16 + stereoWidthSmooth * 0.12;
   camZoomBase  += (camZoomTarget - camZoomBase) * 0.05; // smooth lerp
 
   // Gentle serpentine motion on the orbit plane
   const camX = Math.sin(camOrbitAngle) * (camZoomBase + Math.cos(time * 0.7) * 0.5);
   const camZ = Math.cos(camOrbitAngle) * (camZoomBase + Math.sin(time * 0.5) * 0.5);
-  const camY = Math.sin(time * 0.4) * 1.1 + 1.0 + pulse * 0.2;
+  const camY = Math.sin(time * 0.4) * (0.9 + loudnessDrift * 0.12) + 0.9 + pulse * 0.1;
 
-  camera.position.set(camX, camY, camZ);
+  const camShake = Math.min(0.055, glitchBurst * 0.014 + transient * 0.012 + plrVisual * 0.01);
+  const jitterX = (Math.random() - 0.5) * camShake;
+  const jitterY = (Math.random() - 0.5) * camShake * 0.6;
+  const jitterZ = (Math.random() - 0.5) * camShake;
+
+  camera.position.set(camX + jitterX, camY + jitterY, camZ + jitterZ);
   camera.lookAt(0, 0, 0);
 
   // Subtle scene rotation synced to beat
   points.rotation.y += 0.00035 + bass * 0.0018 + pulse * 0.0012;
   points.rotation.x  = Math.sin(time * 0.3) * 0.07 + presence * 0.03 + pulse * 0.02;
+  points.rotation.z  = Math.sin(time * 0.6) * feedbackWarp * 0.3;
+  centerAccentPoints.rotation.y = points.rotation.y * 1.03;
+  centerAccentPoints.rotation.x = points.rotation.x * 1.08;
+  leftPoints.rotation.y = points.rotation.y * 0.9 - stereoWidthSmooth * 0.36;
+  rightPoints.rotation.y = points.rotation.y * 0.9 + stereoWidthSmooth * 0.36;
+  leftPoints.rotation.x = points.rotation.x * 0.85 + (leftEnergySmooth - rightEnergySmooth) * 0.2;
+  rightPoints.rotation.x = points.rotation.x * 0.85 + (rightEnergySmooth - leftEnergySmooth) * 0.2;
+  leftAccentPoints.rotation.y = leftPoints.rotation.y * 1.08;
+  rightAccentPoints.rotation.y = rightPoints.rotation.y * 1.08;
+  leftAccentPoints.rotation.x = leftPoints.rotation.x * 1.12;
+  rightAccentPoints.rotation.x = rightPoints.rotation.x * 1.12;
+  leftPoints.rotation.z = -feedbackWarp * 0.24;
+  rightPoints.rotation.z = feedbackWarp * 0.24;
+
+  // ── Controlled glitch accents (short, beat-driven) ──────────────────────
+  const glitchLevel = Math.max(0, Math.min(1.0, glitchBurst * 0.26 + lowGate * 0.34 + transient * 0.1 + pulse * 0.05 - 0.32));
+  glitchPass.enabled = glitchLevel > 0.26;
+  glitchPass.goWild = glitchLevel > 0.96 && Math.random() < 0.01;
+  const jitter = Math.min(0.022, glitchLevel * 0.022);
+  points.position.x = panShift * 0.24 + (Math.random() - 0.5) * jitter;
+  points.position.y = (Math.random() - 0.5) * jitter * 0.6;
 
   // 4. Render via Composer (Bloom)
   composer.render();
@@ -296,6 +810,34 @@ function initPlayerUI() {
   resetIdleTimer();
 }
 
+function initTrackPicker() {
+  setTrackIndicator(DEFAULT_TRACK_NAME, false);
+
+  loadTrackBtn.addEventListener('click', () => {
+    trackFileInput.click();
+  });
+
+  trackFileInput.addEventListener('change', () => {
+    const nextFile = trackFileInput.files?.[0];
+    if (!nextFile) return;
+
+    if (customTrackUrl) URL.revokeObjectURL(customTrackUrl);
+    customTrackUrl = URL.createObjectURL(nextFile);
+
+    const shouldResumePlayback = !audioEl.paused;
+    audioEl.src = customTrackUrl;
+    audioEl.load();
+    audioEl.currentTime = 0;
+    setTrackIndicator(nextFile.name, true);
+
+    if (shouldResumePlayback) {
+      void audioEl.play().catch(() => undefined);
+    }
+
+    trackFileInput.value = '';
+  });
+}
+
 // ─── Recording ────────────────────────────────────────────────────────────────
 function toggleRecording() {
   if (!mediaRecorder || mediaRecorder.state === 'inactive') {
@@ -343,9 +885,12 @@ function stopRecording() {
 async function main() {
   wasmModule = await init();
   engine     = new DaliaEngine();
+  leftEngine = new DaliaEngine();
+  rightEngine = new DaliaEngine();
 
   setupWebGL();
   initPlayerUI();
+  initTrackPicker();
   window.addEventListener('resize', resizeCanvas);
 
   audioEl.addEventListener('play', () => {
@@ -380,8 +925,9 @@ async function main() {
   mashupBtn.id        = 'mashup-btn';
   mashupBtn.className = 'control-btn mashup';
   mashupBtn.textContent = '🔀';
-  mashupBtn.title     = 'Mashup Mode';
-  mashupBtn.addEventListener('click', goNextPreset);
+  mashupBtn.title     = 'Mashup Auto (OFF)';
+  mashupBtn.addEventListener('click', () => setMashupMode(!mashupEnabled));
+  mashupBtnRef = mashupBtn;
 
   // Insert at the right side of the player
   const progressWrapper = player.querySelector('.progress-wrapper')!;
@@ -389,15 +935,8 @@ async function main() {
   player.insertBefore(nextBtn, progressWrapper.nextSibling);
   player.appendChild(mashupBtn);
 
-  // ── Preset label overlay ──────────────────────────────────────────────────
-  const label          = document.createElement('div');
-  label.id             = 'preset-label';
-  label.className      = 'preset-label';
-  label.textContent    = PRESET_NAMES[0];
-  document.getElementById('app')!.appendChild(label);
-
-  // Show initial preset name (guard against stale WASM bindings)
-  try { showPresetLabel(PRESET_NAMES[engine.current_preset_index()] ?? PRESET_NAMES[0]); } catch (_) {}
+  // Show initial preset status inside the player bar
+  try { syncPresetIndicator(); } catch (_) {}
 
   // Keyboard shortcuts: ← → cycle presets
   document.addEventListener('keydown', (e) => {
