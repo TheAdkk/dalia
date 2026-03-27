@@ -52,6 +52,7 @@ body {
   z-index: 10;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
   background: rgba(20, 20, 20, 0.6);
   backdrop-filter: blur(15px);
@@ -94,6 +95,32 @@ body {
   align-items: center;
   gap: 12px;
   min-width: 250px;
+}
+
+.player-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 230px;
+}
+
+.status-pill {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+  transition: color 0.2s ease, text-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.status-pill.muted {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+#preset-indicator.changed {
+  color: #ffffff;
+  text-shadow: 0 0 14px rgba(130, 185, 255, 0.55);
+  transform: translateX(2px);
 }
 
 #time-current, #time-total {
@@ -166,6 +193,11 @@ input[type="range"]::-webkit-slider-thumb:hover {
   animation: pulse-record 1.5s infinite alternate;
 }
 
+.track-btn {
+  min-width: 62px;
+  justify-content: center;
+}
+
 @keyframes pulse-record {
   from { box-shadow: 0 0 5px rgba(244, 63, 94, 0.1); }
   to { box-shadow: 0 0 15px rgba(244, 63, 94, 0.4); }
@@ -184,26 +216,33 @@ input[type="range"]::-webkit-slider-thumb:hover {
   background: rgba(255, 255, 255, 0.12);
 }
 
-/* ─── Preset Label Overlay ─── */
-.preset-label {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 20;
-  font-family: var(--font-sans);
-  font-size: clamp(1.4rem, 5vw, 2.8rem);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.92);
-  text-shadow:
-    0 0 20px rgba(180, 100, 255, 0.9),
-    0 0 40px rgba(180, 100, 255, 0.6),
-    0 0 80px rgba(100, 50, 255, 0.4);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.4s ease;
-  white-space: nowrap;
+.control-btn.mashup {
+  opacity: 0.75;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.control-btn.mashup.active {
+  opacity: 1;
+  background: rgba(180, 100, 255, 0.22);
+  box-shadow: 0 0 16px rgba(140, 90, 255, 0.45);
+}
+
+@media (max-width: 980px) {
+  .player-container {
+    width: min(94vw, 760px);
+    border-radius: 24px;
+    padding: 10px 14px;
+    gap: 10px;
+  }
+
+  .progress-wrapper {
+    min-width: 200px;
+    flex: 1 1 220px;
+  }
+
+  .player-meta {
+    min-width: 170px;
+    flex: 1 1 170px;
+  }
 }
 

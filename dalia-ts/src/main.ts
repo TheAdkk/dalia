@@ -32,6 +32,12 @@ const SPECTRAL_PALETTE = [
 const WHITE_POINT = new THREE.Color('#FFFFFF');
 const liveColor = new THREE.Color('#AA55FF');
 const spectralColor = new THREE.Color('#AA55FF');
+const SINGLE_CORE_MODE = true;
+const WORMHOLE_MODE = true;
+const SHOW_WAVEFORM = false;
+const SHOW_SPARK_RING = false;
+const AUTO_PRESET_MUTATION = true;
+const ENVIRONMENT_MODE = true;
 
 // ─── WASM + Audio State ───────────────────────────────────────────────────────
 let wasmModule: InitOutput;
@@ -97,6 +103,10 @@ let noiseMaterial: THREE.PointsMaterial;
 let noisePoints: THREE.Points;
 let sparkRingMaterial: THREE.PointsMaterial;
 let sparkRingPoints: THREE.Points;
+let tunnelGeometry: THREE.BufferGeometry;
+let tunnelMaterial: THREE.PointsMaterial;
+let tunnelPoints: THREE.Points;
+let tunnelPositions: Float32Array;
 let waveformGeometry: THREE.BufferGeometry;
 let waveformMaterial: THREE.LineBasicMaterial;
 let waveformLine: THREE.Line;
@@ -144,6 +154,9 @@ let mashupBtnRef: HTMLButtonElement | null = null;
 const DEFAULT_TRACK_NAME = 'test_music.opus';
 let customTrackUrl: string | null = null;
 let presetFlashTimeout: number | null = null;
+let lastAutoPresetAtMs = 0;
+let glitchCooldownUntilMs = 0;
+let glitchActiveUntilMs = 0;
 
 // ─── WebGL & Three.js Setup ───────────────────────────────────────────────────
 function setupWebGL() {
@@ -156,9 +169,14 @@ function setupWebGL() {
 
   scene = new THREE.Scene();
 
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  camera.position.set(0, 2, 8);
-  camera.lookAt(0, 0, 0);
+  camera = new THREE.PerspectiveCamera(WORMHOLE_MODE ? 88 : 75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  if (WORMHOLE_MODE) {
+    camera.position.set(0, 0.4, 2.4);
+    camera.lookAt(0, 0, -18);
+  } else {
+    camera.position.set(0, 2, 8);
+    camera.lookAt(0, 0, 0);
+  }
 
   // Zero-copy links for center/left/right engines
   const centerPtr = engine.get_geometry_ptr();
@@ -245,6 +263,13 @@ function setupWebGL() {
   scene.add(leftAccentPoints);
   scene.add(rightAccentPoints);
 
+  if (SINGLE_CORE_MODE) {
+    leftPoints.visible = false;
+    rightPoints.visible = false;
+    leftAccentPoints.visible = false;
+    rightAccentPoints.visible = false;
+  }
+
   // Depth texture layer: distant particles to add volume/parallax
   const textureCount = 4200;
   const texturePositions = new Float32Array(textureCount * 3);
@@ -293,6 +318,30 @@ function setupWebGL() {
   noisePoints = new THREE.Points(noiseGeometry, noiseMaterial);
   scene.add(noisePoints);
 
+  const tunnelCount = 7600;
+  tunnelPositions = new Float32Array(tunnelCount * 3);
+  for (let i = 0; i < tunnelCount; i++) {
+    const i3 = i * 3;
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 3.2 + Math.pow(Math.random(), 0.62) * 9.5;
+    tunnelPositions[i3] = Math.cos(angle) * radius;
+    tunnelPositions[i3 + 1] = Math.sin(angle) * radius * 0.72;
+    tunnelPositions[i3 + 2] = -150 + Math.random() * 170;
+  }
+  tunnelGeometry = new THREE.BufferGeometry();
+  tunnelGeometry.setAttribute('position', new THREE.BufferAttribute(tunnelPositions, 3));
+  tunnelMaterial = new THREE.PointsMaterial({
+    color:       0x8a4a1a,
+    size:        0.022,
+    blending:    THREE.AdditiveBlending,
+    transparent: true,
+    opacity:     0.11,
+    depthWrite:  false,
+  });
+  tunnelPoints = new THREE.Points(tunnelGeometry, tunnelMaterial);
+  tunnelPoints.position.z = -18;
+  scene.add(tunnelPoints);
+
   const ringPoints = 220;
   const ringPositions = new Float32Array(ringPoints * 3);
   for (let i = 0; i < ringPoints; i++) {
@@ -313,7 +362,7 @@ function setupWebGL() {
     depthWrite:  false,
   });
   sparkRingPoints = new THREE.Points(ringGeometry, sparkRingMaterial);
-  sparkRingPoints.visible = true;
+  sparkRingPoints.visible = SHOW_SPARK_RING;
   sparkRingPoints.scale.set(0.2, 0.2, 0.2);
   scene.add(sparkRingPoints);
 
@@ -338,6 +387,7 @@ function setupWebGL() {
   });
   waveformLine = new THREE.Line(waveformGeometry, waveformMaterial);
   waveformLine.position.set(0, -1.35, 0.35);
+  waveformLine.visible = SHOW_WAVEFORM;
   scene.add(waveformLine);
 
   scene.fog = new THREE.FogExp2(0x000000, 0.03);
@@ -491,6 +541,126 @@ function setMashupMode(enabled: boolean) {
   syncPresetIndicator();
 }
 
+function maybeMutatePreset(dynamicScore: number, transientScore: number, nowMs: number) {
+  if (!AUTO_PRESET_MUTATION || mashupEnabled) return;
+
+  const cooldownMs = 2200 + (1 - dynamicScore) * 3000;
+  if (nowMs - lastAutoPresetAtMs < cooldownMs) return;
+
+  const trigger = transientScore > 0.58 || (dynamicScore > 0.64 && transientScore > 0.42);
+  if (!trigger) return;
+
+  // High dynamic range tends toward forward evolution; low range occasionally pulls back.
+  if (dynamicScore > 0.72 || (dynamicScore > 0.5 && Math.random() < 0.62)) {
+    goNextPreset();
+  } else {
+    goPrevPreset();
+  }
+
+  lastAutoPresetAtMs = nowMs;
+}
+
+type PresetEnvironment = {
+  fogColor: number;
+  fogDensity: number;
+  textureOpacity: number;
+  textureSize: number;
+  noiseOpacity: number;
+  noiseSize: number;
+  tunnelSpin: number;
+  tunnelWarp: number;
+  tunnelHueMix: number;
+  bloomBoost: number;
+  glitchGain: number;
+};
+
+function getPresetEnvironment(presetIndex: number, dynamicScore: number, transientScore: number): PresetEnvironment {
+  if (!ENVIRONMENT_MODE) {
+    return {
+      fogColor: 0x000000,
+      fogDensity: 0.02,
+      textureOpacity: 0.12,
+      textureSize: 0.02,
+      noiseOpacity: 0.08,
+      noiseSize: 0.012,
+      tunnelSpin: 0.0012,
+      tunnelWarp: 0.12,
+      tunnelHueMix: 0.24,
+      bloomBoost: 0,
+      glitchGain: 1,
+    };
+  }
+
+  const phase = presetIndex % 4;
+  const drive = Math.max(dynamicScore, transientScore);
+
+  if (phase === 0) {
+    // Brain-root: denser void, root-like noise pulse
+    return {
+      fogColor: 0x070504,
+      fogDensity: 0.022 + drive * 0.014,
+      textureOpacity: 0.14 + drive * 0.12,
+      textureSize: 0.02 + drive * 0.014,
+      noiseOpacity: 0.09 + drive * 0.14,
+      noiseSize: 0.012 + drive * 0.01,
+      tunnelSpin: 0.0014 + drive * 0.0018,
+      tunnelWarp: 0.18 + drive * 0.12,
+      tunnelHueMix: 0.34,
+      bloomBoost: 0.01 + drive * 0.05,
+      glitchGain: 0.85,
+    };
+  }
+
+  if (phase === 1) {
+    // Acid: saturated glow, smoother grain
+    return {
+      fogColor: 0x090c04,
+      fogDensity: 0.018 + drive * 0.012,
+      textureOpacity: 0.16 + drive * 0.13,
+      textureSize: 0.023 + drive * 0.016,
+      noiseOpacity: 0.07 + drive * 0.09,
+      noiseSize: 0.01 + drive * 0.008,
+      tunnelSpin: 0.0017 + drive * 0.0024,
+      tunnelWarp: 0.24 + drive * 0.14,
+      tunnelHueMix: 0.46,
+      bloomBoost: 0.03 + drive * 0.08,
+      glitchGain: 0.9,
+    };
+  }
+
+  if (phase === 2) {
+    // Psy: stronger tunnel twist, trance feel
+    return {
+      fogColor: 0x05060c,
+      fogDensity: 0.017 + drive * 0.011,
+      textureOpacity: 0.15 + drive * 0.1,
+      textureSize: 0.021 + drive * 0.015,
+      noiseOpacity: 0.08 + drive * 0.12,
+      noiseSize: 0.011 + drive * 0.009,
+      tunnelSpin: 0.0022 + drive * 0.003,
+      tunnelWarp: 0.3 + drive * 0.16,
+      tunnelHueMix: 0.58,
+      bloomBoost: 0.02 + drive * 0.06,
+      glitchGain: 0.95,
+    };
+  }
+
+  // Glitch-tech: sharper artifacts with lower fog
+  return {
+    fogColor: 0x040404,
+    fogDensity: 0.014 + drive * 0.01,
+    textureOpacity: 0.12 + drive * 0.11,
+    textureSize: 0.019 + drive * 0.013,
+    noiseOpacity: 0.1 + drive * 0.16,
+    noiseSize: 0.012 + drive * 0.012,
+    tunnelSpin: 0.0015 + drive * 0.0022,
+    tunnelWarp: 0.22 + drive * 0.15,
+    tunnelHueMix: 0.4,
+    bloomBoost: 0.01 + drive * 0.04,
+    glitchGain: 1.05,
+  };
+}
+
 // ─── Render Loop ─────────────────────────────────────────────────────────────
 function renderLoop() {
   requestAnimationFrame(renderLoop);
@@ -583,7 +753,11 @@ function renderLoop() {
   const transient = Math.max(0, energyFast - energySlow);
   transientPulse += (transient * 2.2 + subBass * 0.25 + spectralFluxGate * 0.5 - transientPulse) * 0.18;
   const pulse = Math.min(transientPulse, 1.0);
-  const time = performance.now() * 0.0003;
+  const nowMs = performance.now();
+  const time = nowMs * 0.0003;
+  maybeMutatePreset(dynamicRangeVisual, Math.max(pulse, spectralFluxGate), nowMs);
+  const presetIdx = engine.current_preset_index();
+  const env = getPresetEnvironment(presetIdx, dynamicRangeVisual, Math.max(pulse, spectralFluxGate));
 
   // Stereo-aware low-end gate (<150Hz across L/R)
   const under150HzStereo = Math.max(under150Left, under150Right);
@@ -632,13 +806,16 @@ function renderLoop() {
 
   // ── Particle size modulation (bass-driven) ────────────────────────────────
   // Sub-bass gives body, transients add short accents
-  const targetSize = 0.018 + bass * 0.05 + subBass * 0.035 + treb * 0.01 + pulse * 0.02;
+  const targetSize = 0.046 + bass * 0.1 + subBass * 0.07 + treb * 0.02 + pulse * 0.04;
   pointsMaterial.size += (targetSize - pointsMaterial.size) * 0.12;
+  const coreScaleTarget = 1.6 + energy * 0.52 + pulse * 0.3;
+  points.scale.setScalar(points.scale.x + (coreScaleTarget - points.scale.x) * 0.08);
+  centerAccentPoints.scale.setScalar(points.scale.x * 1.02);
 
-  const panShift = (stereoBalanceSmooth - 0.5) * 1.2;
+  const panShift = SINGLE_CORE_MODE ? 0 : (stereoBalanceSmooth - 0.5) * 1.2;
   points.position.x = panShift * 0.24;
-  leftPoints.position.x = -2.35 + panShift * 0.45;
-  rightPoints.position.x = 2.35 + panShift * 0.45;
+  leftPoints.position.x = SINGLE_CORE_MODE ? points.position.x : (-2.35 + panShift * 0.45);
+  rightPoints.position.x = SINGLE_CORE_MODE ? points.position.x : (2.35 + panShift * 0.45);
 
   leftPointsMaterial.size = Math.max(0.01, pointsMaterial.size * (0.74 + leftEnergySmooth * 0.34 + stereoWidthSmooth * 0.14));
   rightPointsMaterial.size = Math.max(0.01, pointsMaterial.size * (0.74 + rightEnergySmooth * 0.34 + stereoWidthSmooth * 0.14));
@@ -649,44 +826,71 @@ function renderLoop() {
   // ── Texture + depth layer ────────────────────────────────────────────────
   texturePoints.rotation.y += 0.0002 + air * 0.001 + pulse * 0.0005;
   texturePoints.rotation.x  = Math.sin(time * 0.22) * 0.18;
-  texturePoints.position.z += ((-0.8 - energy * 1.8) - texturePoints.position.z) * 0.05;
-  textureMaterial.opacity   = Math.max(0.03, Math.min(0.16, 0.06 + air * 0.05 + pulse * 0.02 + dynamicRangeVisual * 0.04));
-  textureMaterial.size      = Math.max(0.01, Math.min(0.04, 0.014 + air * 0.012 + pulse * 0.008 + plrVisual * 0.006));
+  texturePoints.position.z += ((-1.2 - energy * 2.6) - texturePoints.position.z) * 0.05;
+  textureMaterial.opacity = Math.max(0.04, Math.min(0.32, env.textureOpacity));
+  textureMaterial.size = Math.max(0.01, Math.min(0.06, env.textureSize));
   if (scene.fog instanceof THREE.FogExp2) {
-    scene.fog.density = Math.max(0.01, Math.min(0.05, 0.018 + energy * 0.012 + pulse * 0.006 + dynamicRangeVisual * 0.008));
+    scene.fog.color.setHex(env.fogColor);
+    scene.fog.density = Math.max(0.008, Math.min(0.06, env.fogDensity));
   }
 
   noisePoints.rotation.y += 0.00008 + air * 0.00045;
   noisePoints.rotation.x = Math.sin(time * 0.12) * 0.08;
-  noiseMaterial.opacity = Math.max(0.03, Math.min(0.14, 0.04 + air * 0.05 + stereoWidthSmooth * 0.04));
-  noiseMaterial.size = Math.max(0.006, Math.min(0.02, 0.008 + pulse * 0.006 + air * 0.004));
+  noiseMaterial.opacity = Math.max(0.04, Math.min(0.26, env.noiseOpacity));
+  noiseMaterial.size = Math.max(0.006, Math.min(0.03, env.noiseSize));
   noiseMaterial.color.copy(spectralColor).lerp(WHITE_POINT, 0.06);
 
-  const sparkGate = clamp01((under150HzStereo - 0.24) / 0.36);
-  sparkRingPoints.scale.setScalar(Math.max(0.2, 0.8 + sparkGate * 2.4 + pulse * 0.7));
-  sparkRingMaterial.opacity = clamp01(0.02 + sparkGate * 0.18 + transient * 0.08);
-  sparkRingMaterial.size = Math.max(0.018, Math.min(0.052, 0.022 + sparkGate * 0.03 + pulse * 0.01));
-  sparkRingMaterial.color.copy(spectralColor).lerp(accentColorA, 0.35 + sparkGate * 0.2);
-
-  // Waveform overlay: low-cost temporal shape layer gated by spectral flux
-  const waveAttr = waveformGeometry.getAttribute('position') as THREE.BufferAttribute;
-  const waveCount = waveAttr.count;
-  const binStep = Math.max(1, Math.floor(dataArray.length / waveCount));
-  const waveAmp = 0.35 + energy * 0.85 + spectralFluxGate * 1.0;
-  for (let i = 0; i < waveCount; i++) {
+  // Wormhole tunnel layer
+  const tunnelAttr = tunnelGeometry.getAttribute('position') as THREE.BufferAttribute;
+  const tunnelCount = tunnelAttr.count;
+  const tunnelSpeed = 0.24 + energy * 1.05 + subBass * 0.72 + pulse * 0.6 + feedbackWarp * 0.5;
+  for (let i = 0; i < tunnelCount; i++) {
     const i3 = i * 3;
-    const x = ((i / (waveCount - 1)) - 0.5) * 6.8;
-    const sample = dataArray[Math.min(dataArray.length - 1, i * binStep)] / 255;
-    const y = (sample - 0.5) * waveAmp * 2.4;
-    waveformPositions[i3] = x;
-    waveformPositions[i3 + 1] = y;
-    waveformPositions[i3 + 2] = Math.sin((i * 0.11) + time * 1.8) * (0.08 + feedbackWarp * 0.16);
+    tunnelPositions[i3 + 2] += tunnelSpeed;
+    if (tunnelPositions[i3 + 2] > 8) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 3.2 + Math.pow(Math.random(), 0.62) * 9.5;
+      tunnelPositions[i3] = Math.cos(angle) * radius;
+      tunnelPositions[i3 + 1] = Math.sin(angle) * radius * 0.72;
+      tunnelPositions[i3 + 2] = -150 - Math.random() * 20;
+    }
   }
-  waveAttr.needsUpdate = true;
-  waveformMaterial.opacity = clamp01(0.05 + energy * 0.22 + spectralFluxGate * 0.42);
-  waveformMaterial.color.copy(spectralColor).lerp(WHITE_POINT, 0.18 + spectralFluxGate * 0.2);
-  waveformLine.position.y = -1.38 + subBass * 0.32 + pulse * 0.16;
-  waveformLine.rotation.y = (stereoBalanceSmooth - 0.5) * 0.25;
+  tunnelAttr.needsUpdate = true;
+  tunnelPoints.rotation.z += env.tunnelSpin + feedbackWarp * 0.013 + spectralFluxGate * 0.008;
+  tunnelPoints.rotation.x = Math.sin(time * (0.16 + env.tunnelWarp)) * (0.05 + env.tunnelWarp * 0.08) + (stereoBalanceSmooth - 0.5) * 0.07;
+  tunnelMaterial.opacity = clamp01(0.07 + energy * 0.18 + spectralFluxGate * 0.24 + dynamicRangeVisual * 0.08);
+  tunnelMaterial.size = Math.max(0.013, Math.min(0.052, 0.02 + pulse * 0.014 + feedbackWarp * 0.012));
+  tunnelMaterial.color.copy(spectralColor).lerp(accentColorA, env.tunnelHueMix);
+
+  if (SHOW_SPARK_RING) {
+    const sparkGate = clamp01((under150HzStereo - 0.24) / 0.36);
+    sparkRingPoints.scale.setScalar(Math.max(0.2, 0.8 + sparkGate * 2.4 + pulse * 0.7));
+    sparkRingMaterial.opacity = clamp01(0.02 + sparkGate * 0.18 + transient * 0.08);
+    sparkRingMaterial.size = Math.max(0.018, Math.min(0.052, 0.022 + sparkGate * 0.03 + pulse * 0.01));
+    sparkRingMaterial.color.copy(spectralColor).lerp(accentColorA, 0.35 + sparkGate * 0.2);
+  }
+
+  if (SHOW_WAVEFORM) {
+    // Waveform overlay: low-cost temporal shape layer gated by spectral flux
+    const waveAttr = waveformGeometry.getAttribute('position') as THREE.BufferAttribute;
+    const waveCount = waveAttr.count;
+    const binStep = Math.max(1, Math.floor(dataArray.length / waveCount));
+    const waveAmp = 0.35 + energy * 0.85 + spectralFluxGate * 1.0;
+    for (let i = 0; i < waveCount; i++) {
+      const i3 = i * 3;
+      const x = ((i / (waveCount - 1)) - 0.5) * 6.8;
+      const sample = dataArray[Math.min(dataArray.length - 1, i * binStep)] / 255;
+      const y = (sample - 0.5) * waveAmp * 2.4;
+      waveformPositions[i3] = x;
+      waveformPositions[i3 + 1] = y;
+      waveformPositions[i3 + 2] = Math.sin((i * 0.11) + time * 1.8) * (0.08 + feedbackWarp * 0.16);
+    }
+    waveAttr.needsUpdate = true;
+    waveformMaterial.opacity = clamp01(0.05 + energy * 0.22 + spectralFluxGate * 0.42);
+    waveformMaterial.color.copy(spectralColor).lerp(WHITE_POINT, 0.18 + spectralFluxGate * 0.2);
+    waveformLine.position.y = -1.38 + subBass * 0.32 + pulse * 0.16;
+    waveformLine.rotation.y = (stereoBalanceSmooth - 0.5) * 0.25;
+  }
 
   // Basic feedback warp: smooth scene-space distortion tied to musical energy
   const warpTarget = clamp01(mid * 0.55 + presence * 0.45 + spectralFluxGate * 0.65 + stereoWidthSmooth * 0.45);
@@ -700,31 +904,43 @@ function renderLoop() {
 
   // ── Dynamic bloom (energy flares on drops) ────────────────────────────
   // Constrained bloom to avoid blown-out frames
-  const targetBloom = Math.max(0.18, Math.min(0.72, 0.22 + subBass * 0.2 + energy * 0.12 + pulse * 0.12 + air * 0.05 + dynamicRangeVisual * 0.04 + plrVisual * 0.05 + loudnessDrift * 0.03 + glitchBurst * 0.02 + spectralFluxGate * 0.03));
+  const targetBloom = Math.max(0.18, Math.min(0.72, 0.22 + subBass * 0.2 + energy * 0.12 + pulse * 0.12 + air * 0.05 + dynamicRangeVisual * 0.04 + plrVisual * 0.05 + loudnessDrift * 0.03 + glitchBurst * 0.02 + spectralFluxGate * 0.03 + env.bloomBoost));
   bloomPass.strength += (targetBloom - bloomPass.strength) * 0.06;
   bloomPass.radius    = Math.max(0.08, Math.min(0.32, 0.1 + treb * 0.12 + pulse * 0.08 + plrVisual * 0.04 + glitchBurst * 0.015));
   bloomPass.threshold = Math.max(0.14, Math.min(0.4, 0.24 + (1.0 - energy) * 0.09 - pulse * 0.04 - dynamicRangeVisual * 0.02 - glitchBurst * 0.01));
   bloomPass.strength = Math.min(bloomPass.strength, 0.68);
 
   // ── Camera choreography ───────────────────────────────────────────────────
-  camOrbitAngle += 0.0016 + mid * 0.0028 + pulse * 0.0012;
-
-  // Bass-triggered zoom pulses toward the geometry
-  camZoomTarget = 8.28 - subBass * 0.86 - bass * 0.56 - pulse * 0.34 - dynamicRangeVisual * 0.22 - plrVisual * 0.16 + stereoWidthSmooth * 0.12;
-  camZoomBase  += (camZoomTarget - camZoomBase) * 0.05; // smooth lerp
-
-  // Gentle serpentine motion on the orbit plane
-  const camX = Math.sin(camOrbitAngle) * (camZoomBase + Math.cos(time * 0.7) * 0.5);
-  const camZ = Math.cos(camOrbitAngle) * (camZoomBase + Math.sin(time * 0.5) * 0.5);
-  const camY = Math.sin(time * 0.4) * (0.9 + loudnessDrift * 0.12) + 0.9 + pulse * 0.1;
-
   const camShake = Math.min(0.055, glitchBurst * 0.014 + transient * 0.012 + plrVisual * 0.01);
   const jitterX = (Math.random() - 0.5) * camShake;
   const jitterY = (Math.random() - 0.5) * camShake * 0.6;
   const jitterZ = (Math.random() - 0.5) * camShake;
 
-  camera.position.set(camX + jitterX, camY + jitterY, camZ + jitterZ);
-  camera.lookAt(0, 0, 0);
+  if (WORMHOLE_MODE) {
+    camOrbitAngle += 0.0006 + mid * 0.0012 + pulse * 0.0008;
+    camZoomTarget = 2.4 - subBass * 0.34 - pulse * 0.2 - dynamicRangeVisual * 0.14;
+    camZoomBase += (camZoomTarget - camZoomBase) * 0.08;
+
+    const driftX = Math.sin(time * 0.55 + camOrbitAngle) * 0.34;
+    const driftY = Math.cos(time * 0.37 + camOrbitAngle * 0.7) * 0.24;
+
+    camera.position.set(driftX + jitterX, driftY + jitterY, camZoomBase + jitterZ);
+    camera.lookAt(0, 0, -22);
+
+    points.position.z = -16 + pulse * 1.8;
+    centerAccentPoints.position.z = points.position.z;
+  } else {
+    camOrbitAngle += 0.0016 + mid * 0.0028 + pulse * 0.0012;
+    camZoomTarget = 8.28 - subBass * 0.86 - bass * 0.56 - pulse * 0.34 - dynamicRangeVisual * 0.22 - plrVisual * 0.16 + stereoWidthSmooth * 0.12;
+    camZoomBase += (camZoomTarget - camZoomBase) * 0.05;
+
+    const camX = Math.sin(camOrbitAngle) * (camZoomBase + Math.cos(time * 0.7) * 0.5);
+    const camZ = Math.cos(camOrbitAngle) * (camZoomBase + Math.sin(time * 0.5) * 0.5);
+    const camY = Math.sin(time * 0.4) * (0.9 + loudnessDrift * 0.12) + 0.9 + pulse * 0.1;
+
+    camera.position.set(camX + jitterX, camY + jitterY, camZ + jitterZ);
+    camera.lookAt(0, 0, 0);
+  }
 
   // Subtle scene rotation synced to beat
   points.rotation.y += 0.00035 + bass * 0.0018 + pulse * 0.0012;
@@ -744,10 +960,15 @@ function renderLoop() {
   rightPoints.rotation.z = feedbackWarp * 0.24;
 
   // ── Controlled glitch accents (short, beat-driven) ──────────────────────
-  const glitchLevel = Math.max(0, Math.min(1.0, glitchBurst * 0.26 + lowGate * 0.34 + transient * 0.1 + pulse * 0.05 - 0.32));
-  glitchPass.enabled = glitchLevel > 0.26;
-  glitchPass.goWild = glitchLevel > 0.96 && Math.random() < 0.01;
-  const jitter = Math.min(0.022, glitchLevel * 0.022);
+  const glitchLevel = Math.max(0, Math.min(1.0, (glitchBurst * 0.28 + lowGate * 0.3 + transient * 0.14 + pulse * 0.06 + spectralFluxGate * 0.1 - 0.34) * env.glitchGain));
+  if (glitchLevel > 0.72 && nowMs > glitchCooldownUntilMs) {
+    glitchActiveUntilMs = nowMs + (70 + glitchLevel * 130);
+    glitchCooldownUntilMs = nowMs + 480 + (1 - glitchLevel) * 460;
+  }
+  const glitchEnabled = nowMs < glitchActiveUntilMs;
+  glitchPass.enabled = glitchEnabled;
+  glitchPass.goWild = glitchEnabled && glitchLevel > 0.95 && Math.random() < 0.008;
+  const jitter = glitchEnabled ? Math.min(0.016, glitchLevel * 0.014) : 0;
   points.position.x = panShift * 0.24 + (Math.random() - 0.5) * jitter;
   points.position.y = (Math.random() - 0.5) * jitter * 0.6;
 

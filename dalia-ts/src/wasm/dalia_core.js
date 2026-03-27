@@ -12,7 +12,7 @@ export class DaliaEngine {
         wasm.__wbg_daliaengine_free(ptr, 0);
     }
     /**
-     * Returns current preset index (0-5)
+     * Returns current preset index (0-7)
      * @returns {number}
      */
     current_preset_index() {
@@ -57,6 +57,13 @@ export class DaliaEngine {
     /**
      * @returns {number}
      */
+    get_low_mid() {
+        const ret = wasm.daliaengine_get_low_mid(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
     get_mid() {
         const ret = wasm.daliaengine_get_mid(this.__wbg_ptr);
         return ret;
@@ -94,6 +101,13 @@ export class DaliaEngine {
      */
     get_treb() {
         const ret = wasm.daliaengine_get_treb(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_upper_mid() {
+        const ret = wasm.daliaengine_get_upper_mid(this.__wbg_ptr);
         return ret;
     }
     constructor() {

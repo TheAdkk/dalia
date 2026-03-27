@@ -5,7 +5,7 @@ export class DaliaEngine {
     free(): void;
     [Symbol.dispose](): void;
     /**
-     * Returns current preset index (0-5)
+     * Returns current preset index (0-7)
      */
     current_preset_index(): number;
     get_air(): number;
@@ -13,12 +13,14 @@ export class DaliaEngine {
     get_energy(): number;
     get_geometry_len(): number;
     get_geometry_ptr(): number;
+    get_low_mid(): number;
     get_mid(): number;
     get_presence(): number;
     get_processed_data_len(): number;
     get_processed_data_ptr(): number;
     get_sub_bass(): number;
     get_treb(): number;
+    get_upper_mid(): number;
     constructor();
     next_preset(): void;
     prev_preset(): void;
@@ -40,12 +42,14 @@ export interface InitOutput {
     readonly daliaengine_get_energy: (a: number) => number;
     readonly daliaengine_get_geometry_len: (a: number) => number;
     readonly daliaengine_get_geometry_ptr: (a: number) => number;
+    readonly daliaengine_get_low_mid: (a: number) => number;
     readonly daliaengine_get_mid: (a: number) => number;
     readonly daliaengine_get_presence: (a: number) => number;
     readonly daliaengine_get_processed_data_len: (a: number) => number;
     readonly daliaengine_get_processed_data_ptr: (a: number) => number;
     readonly daliaengine_get_sub_bass: (a: number) => number;
     readonly daliaengine_get_treb: (a: number) => number;
+    readonly daliaengine_get_upper_mid: (a: number) => number;
     readonly daliaengine_new: () => number;
     readonly daliaengine_next_preset: (a: number) => void;
     readonly daliaengine_prev_preset: (a: number) => void;

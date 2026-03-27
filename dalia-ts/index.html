@@ -23,7 +23,13 @@
           <input type="range" id="progress-bar" value="0" max="100" step="0.1" />
           <span id="time-total">0:00</span>
         </div>
+        <div class="player-meta">
+          <span id="preset-indicator" class="status-pill">Preset: Vector Sphere</span>
+          <span id="track-indicator" class="status-pill muted">Track: test_music.opus (default)</span>
+        </div>
+        <button id="load-track-btn" class="record-btn track-btn" title="Load local track">FILE</button>
         <button id="record-btn" class="record-btn" disabled>🔴 REC</button>
+        <input id="track-file-input" type="file" accept="audio/*" hidden />
       </div>
     </div>
 
