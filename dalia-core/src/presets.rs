@@ -8,6 +8,10 @@ pub enum Preset {
     HyperbolicParaboloid,
     NebulaVortex,
     ChaosRibbon,
+    QuantumString,
+    GalacticWeb,
+    VoxelGrid,
+    MorphingCube,
 }
 
 impl Preset {
@@ -20,13 +24,17 @@ impl Preset {
             Preset::FractalSpiral       => Preset::HyperbolicParaboloid,
             Preset::HyperbolicParaboloid => Preset::NebulaVortex,
             Preset::NebulaVortex        => Preset::ChaosRibbon,
-            Preset::ChaosRibbon         => Preset::VectorSphere,
+            Preset::ChaosRibbon         => Preset::QuantumString,
+            Preset::QuantumString       => Preset::GalacticWeb,
+            Preset::GalacticWeb         => Preset::VoxelGrid,
+            Preset::VoxelGrid           => Preset::MorphingCube,
+            Preset::MorphingCube        => Preset::VectorSphere,
         }
     }
 
     pub fn prev(self) -> Preset {
         match self {
-            Preset::VectorSphere         => Preset::ChaosRibbon,
+            Preset::VectorSphere         => Preset::MorphingCube,
             Preset::MutantTorus          => Preset::VectorSphere,
             Preset::LissajousKnot        => Preset::MutantTorus,
             Preset::PlasmaField          => Preset::LissajousKnot,
@@ -34,6 +42,10 @@ impl Preset {
             Preset::HyperbolicParaboloid => Preset::FractalSpiral,
             Preset::NebulaVortex         => Preset::HyperbolicParaboloid,
             Preset::ChaosRibbon          => Preset::NebulaVortex,
+            Preset::QuantumString        => Preset::ChaosRibbon,
+            Preset::GalacticWeb          => Preset::QuantumString,
+            Preset::VoxelGrid            => Preset::GalacticWeb,
+            Preset::MorphingCube         => Preset::VoxelGrid,
         }
     }
 
@@ -47,19 +59,27 @@ impl Preset {
             Preset::HyperbolicParaboloid => 5,
             Preset::NebulaVortex         => 6,
             Preset::ChaosRibbon          => 7,
+            Preset::QuantumString        => 8,
+            Preset::GalacticWeb          => 9,
+            Preset::VoxelGrid            => 10,
+            Preset::MorphingCube         => 11,
         }
     }
 
     pub fn from_index(i: u32) -> Preset {
-        match i % 8 {
-            0 => Preset::VectorSphere,
-            1 => Preset::MutantTorus,
-            2 => Preset::LissajousKnot,
-            3 => Preset::PlasmaField,
-            4 => Preset::FractalSpiral,
-            5 => Preset::HyperbolicParaboloid,
-            6 => Preset::NebulaVortex,
-            _ => Preset::ChaosRibbon,
+        match i % 12 {
+            0  => Preset::VectorSphere,
+            1  => Preset::MutantTorus,
+            2  => Preset::LissajousKnot,
+            3  => Preset::PlasmaField,
+            4  => Preset::FractalSpiral,
+            5  => Preset::HyperbolicParaboloid,
+            6  => Preset::NebulaVortex,
+            7  => Preset::ChaosRibbon,
+            8  => Preset::QuantumString,
+            9  => Preset::GalacticWeb,
+            10 => Preset::VoxelGrid,
+            _  => Preset::MorphingCube,
         }
     }
 }

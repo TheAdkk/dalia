@@ -14,6 +14,10 @@ pub fn vertex(index: usize, preset: Preset, audio: &AudioState, time: f32) -> (f
         Preset::HyperbolicParaboloid => vertex_hyperbolic(index, audio, time),
         Preset::NebulaVortex         => vertex_nebula_vortex(index, audio, time),
         Preset::ChaosRibbon          => vertex_chaos_ribbon(index, audio, time),
+        Preset::QuantumString        => vertex_quantum_string(index, audio, time),
+        Preset::GalacticWeb          => vertex_galactic_web(index, audio, time),
+        Preset::VoxelGrid            => vertex_voxel_grid(index, audio, time),
+        Preset::MorphingCube         => vertex_morphing_cube(index, audio, time),
     }
 }
 
@@ -193,4 +197,110 @@ fn vertex_chaos_ribbon(index: usize, audio: &AudioState, time: f32) -> (f32, f32
     z += tear * 0.8 - crackle * 0.4;
 
     (x, y, z)
+}
+
+fn vertex_quantum_string(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    let f = index as f32;
+    let n = NUM_VERTICES as f32;
+    let u = (f / n) * std::f32::consts::TAU * 4.0;
+    
+    // Parametric laser string
+    let mut x = u.sin() * (4.0 + audio.treb * 2.5);
+    let mut y = u.cos() * (4.0 + audio.treb * 2.5);
+    let mut z = (f / n - 0.5) * 20.0;
+    
+    // Wave distortion
+    let wave1 = (z * 1.5 + time * 3.0).sin() * (1.0 + audio.mid * 2.0);
+    let wave2 = (z * 0.8 - time * 5.0).cos() * (0.5 + audio.upper_mid * 3.0);
+    let pulse = audio.bass * (time * 8.0).sin();
+    
+    x += wave1 + pulse;
+    y += wave2 - pulse;
+    
+    (x, y, z)
+}
+
+fn vertex_galactic_web(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    let f = index as f32;
+    
+    // Pseudo-random deterministic distribution
+    let fx = ((f * 13.3).sin() * 423.1).fract() * 2.0 - 1.0;
+    let fy = ((f * 17.7).cos() * 512.9).fract() * 2.0 - 1.0;
+    let fz = ((f * 23.3).sin() * 118.4).fract() * 2.0 - 1.0;
+
+    let base_radius = 5.0 + audio.energy * 6.0;
+    
+    let mut x = fx * base_radius;
+    let mut y = fy * base_radius * 0.4; // Flatter galaxy
+    let mut z = fz * base_radius;
+    
+    // Gravitational swirl
+    let dist = (x*x + z*z).sqrt();
+    let angle = dist * (0.1 + audio.sub_bass * 0.2) + time * 0.5;
+    
+    let nx = x * angle.cos() - z * angle.sin();
+    let nz = x * angle.sin() + z * angle.cos();
+    
+    // Vertical dispersion on treble
+    y += fy * audio.treb * 3.0 * (nx * 2.0 + time).sin();
+    
+    (nx, y, nz)
+}
+
+fn vertex_voxel_grid(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    let side = (NUM_VERTICES as f32).cbrt().floor() as usize;
+    let slice = side * side;
+    
+    let z_idx = index / slice;
+    let y_idx = (index % slice) / side;
+    let x_idx = index % side;
+    
+    let step = 1.0;
+    let offset = (side as f32) * step * 0.5;
+    
+    let mut x = (x_idx as f32) * step - offset;
+    let mut y = (y_idx as f32) * step - offset;
+    let mut z = (z_idx as f32) * step - offset;
+    
+    // Deform grid
+    let dist = (x*x + y*y + z*z).sqrt();
+    let force = (dist * 0.5 - time * 2.0).sin() * audio.bass * 2.0;
+    let noise = ((x_idx ^ y_idx ^ z_idx) as f32).sin() * audio.presence * 1.5;
+    
+    let scale = 1.0 + force + noise;
+    (x * scale, y * scale, z * scale)
+}
+
+fn vertex_morphing_cube(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    let f = index as f32;
+    let n = NUM_VERTICES as f32;
+    
+    // Sphere base (fibonacci)
+    let phi = std::f32::consts::PI * (3.0 - (5.0_f32).sqrt());
+    let sy = 1.0 - (f / (n - 1.0)) * 2.0;
+    let ry = (1.0 - sy * sy).sqrt();
+    let theta = phi * f;
+    let sx = theta.cos() * ry;
+    let sz = theta.sin() * ry;
+    
+    // Cube Target mapping (normalized)
+    let cx = sx.signum() * sx.abs().powf(0.1);
+    let cy = sy.signum() * sy.abs().powf(0.1);
+    let cz = sz.signum() * sz.abs().powf(0.1);
+    
+    // Easing parameter driven by low-end
+    let mix = audio.sub_bass * 1.5 + (time * 1.0).sin() * 0.5 + 0.5;
+    let clamped_mix = mix.clamp(0.0, 1.0);
+    
+    let x = sx * (1.0 - clamped_mix) + cx * clamped_mix;
+    let y = sy * (1.0 - clamped_mix) + cy * clamped_mix;
+    let z = sz * (1.0 - clamped_mix) + cz * clamped_mix;
+    
+    // Audio breath
+    let scale = 4.0 + audio.bass * 2.0 + audio.energy * 1.0;
+    
+    // Treble jaggedness
+    let jagged = audio.treb * 0.5 * (f * 99.9).sin();
+    
+    (x * scale + jagged, y * scale, z * scale + jagged)
 }

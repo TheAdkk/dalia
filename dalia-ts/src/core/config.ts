@@ -8,6 +8,10 @@ export const CONFIG = {
     'Hyperbolic Paraboloid',
     'Nebula Vortex',
     'Chaos Ribbon',
+    'Quantum String',
+    'Galactic Web',
+    'Voxel Grid',
+    'Morphing Cube',
   ],
   SPECTRAL_PALETTE: [
     '#08120A', '#18BF34', '#B8E61F', '#FFB11A',
