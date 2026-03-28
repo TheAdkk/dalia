@@ -12,7 +12,6 @@ export class DaliaEngine {
         wasm.__wbg_daliaengine_free(ptr, 0);
     }
     /**
-     * Returns current preset index (0-7)
      * @returns {number}
      */
     current_preset_index() {
@@ -130,9 +129,6 @@ export class DaliaEngine {
         const len0 = WASM_VECTOR_LEN;
         wasm.daliaengine_process_audio(this.__wbg_ptr, ptr0, len0);
     }
-    /**
-     * Legacy toggle for Mashup button – cycles forward
-     */
     toggle_mashup() {
         wasm.daliaengine_toggle_mashup(this.__wbg_ptr);
     }

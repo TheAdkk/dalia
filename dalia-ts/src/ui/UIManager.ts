@@ -1,3 +1,5 @@
+import { PLAY_ICON, PAUSE_ICON, NEXT_ICON, PREV_ICON, MASHUP_ICON } from './icons';
+
 export class UIManager {
   public canvas = document.getElementById('visualizer') as HTMLCanvasElement;
   public audioEl = document.getElementById('audio-player') as HTMLAudioElement;
@@ -71,12 +73,12 @@ export class UIManager {
       if (this.audioEl.paused) {
         onPlay();
         this.audioEl.play().then(() => {
-          this.playPauseBtn.textContent = '⏸';
+          this.playPauseBtn.innerHTML = PAUSE_ICON;
           document.getElementById('floating-player')?.classList.remove('fade-out');
         });
       } else {
         this.audioEl.pause();
-        this.playPauseBtn.textContent = '▶';
+        this.playPauseBtn.innerHTML = PLAY_ICON;
       }
     });
 
@@ -136,20 +138,20 @@ export class UIManager {
     prevBtn.id        = 'prev-preset-btn';
     prevBtn.className = 'control-btn preset-nav';
     prevBtn.title     = 'Previous Preset';
-    prevBtn.innerHTML = '&#9664;';
+    prevBtn.innerHTML = PREV_ICON;
     prevBtn.addEventListener('click', onPrev);
 
     const nextBtn = document.createElement('button');
     nextBtn.id        = 'next-preset-btn';
     nextBtn.className = 'control-btn preset-nav';
     nextBtn.title     = 'Next Preset';
-    nextBtn.innerHTML = '&#9654;';
+    nextBtn.innerHTML = NEXT_ICON;
     nextBtn.addEventListener('click', onNext);
 
     const mashupBtn = document.createElement('button');
     mashupBtn.id        = 'mashup-btn';
     mashupBtn.className = 'control-btn mashup';
-    mashupBtn.textContent = '🔀';
+    mashupBtn.innerHTML = MASHUP_ICON;
     mashupBtn.title     = 'Mashup Auto (OFF)';
     mashupBtn.addEventListener('click', onToggleMashup);
     this.mashupBtnRef = mashupBtn;

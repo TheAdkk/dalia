@@ -4,9 +4,6 @@
 export class DaliaEngine {
     free(): void;
     [Symbol.dispose](): void;
-    /**
-     * Returns current preset index (0-7)
-     */
     current_preset_index(): number;
     get_air(): number;
     get_bass(): number;
@@ -25,9 +22,6 @@ export class DaliaEngine {
     next_preset(): void;
     prev_preset(): void;
     process_audio(frequency_data: Uint8Array): void;
-    /**
-     * Legacy toggle for Mashup button – cycles forward
-     */
     toggle_mashup(): void;
 }
 

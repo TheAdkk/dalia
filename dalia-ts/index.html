@@ -17,7 +17,7 @@
 
       <!-- Glassmorphism Floating Player -->
       <div id="floating-player" class="player-container fade-out">
-        <button id="play-pause-btn" class="control-btn play">▶</button>
+        <button id="play-pause-btn" class="control-btn play" title="Play"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="M232.31,114.34l-152-96A15.89,15.89,0,0,0,56.1,32.25C56,32.31,56,32.37,56,32.43V223.57c0,.06,0,.12,0,.18a16,16,0,0,0,24.21,13.88l152-96A16,16,0,0,0,232.31,114.34Z"/></svg></button>
         <div class="progress-wrapper">
           <span id="time-current">0:00</span>
           <input type="range" id="progress-bar" value="0" max="100" step="0.1" />
@@ -27,8 +27,8 @@
           <span id="preset-indicator" class="status-pill">Preset: Vector Sphere</span>
           <span id="track-indicator" class="status-pill muted">Track: test_music.opus (default)</span>
         </div>
-        <button id="load-track-btn" class="record-btn track-btn" title="Load local track">FILE</button>
-        <button id="record-btn" class="record-btn" disabled>🔴 REC</button>
+        <button id="load-track-btn" class="record-btn track-btn" title="Load local track"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 256 256"><path fill="currentColor" d="M216,88a7.89,7.89,0,0,0-2.34-5.66l-56-56A7.89,7.89,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Z"/></svg> FILE</button>
+        <button id="record-btn" class="record-btn" disabled><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256"><circle cx="128" cy="128" r="96" fill="currentColor"/></svg> REC</button>
         <input id="track-file-input" type="file" accept="audio/*" hidden />
       </div>
     </div>
