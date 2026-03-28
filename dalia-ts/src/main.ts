@@ -106,6 +106,21 @@ function goPrevPreset() {
   resetMashupTimer();
 }
 
+function goRandomPreset() {
+  const numPresets = CONFIG.PRESET_NAMES.length;
+  let target = engine.current_preset_index();
+  if (numPresets > 1) {
+    while (target === engine.current_preset_index()) {
+       target = Math.floor(Math.random() * numPresets);
+    }
+  }
+  engine.random_preset(target);
+  leftEngine.random_preset(target);
+  rightEngine.random_preset(target);
+  syncPresetUI();
+  resetMashupTimer();
+}
+
 function setMashupMode(enabled: boolean) {
   mashupEnabled = enabled;
   ui.updateMashupIcon(mashupEnabled);
@@ -116,7 +131,7 @@ function setMashupMode(enabled: boolean) {
 function resetMashupTimer() {
   if (mashupIntervalId !== null) window.clearInterval(mashupIntervalId);
   if (mashupEnabled) {
-    mashupIntervalId = window.setInterval(goNextPreset, CONFIG.MASHUP_INTERVAL_MS);
+    mashupIntervalId = window.setInterval(goRandomPreset, CONFIG.MASHUP_INTERVAL_MS);
   }
 }
 
@@ -134,8 +149,7 @@ function maybeMutatePreset(dynamicScore: number, transientScore: number, nowMs: 
   const trigger = transientScore > 0.58 || (dynamicScore > 0.64 && transientScore > 0.42);
   if (!trigger) return;
 
-  if (dynamicScore > 0.72 || (dynamicScore > 0.5 && Math.random() < 0.62)) goNextPreset();
-  else goPrevPreset();
+  goRandomPreset();
   
   lastAutoPresetAtMs = nowMs;
 }
@@ -261,7 +275,7 @@ function renderLoop() {
   }
 
   const dynamicSaturation = Math.max(0.65, Math.min(1.0, 0.7 + treb * 0.3));
-  const dynamicLightness = Math.max(0.45, Math.min(0.8, 0.5 + energy * 0.3));
+  const dynamicLightness = Math.max(0.25, Math.min(0.55, 0.4 + energy * 0.15));
   
   const baseColor = new THREE.Color().setHSL(masterHueBase, dynamicSaturation, dynamicLightness);
   const accentAColor = new THREE.Color().setHSL((masterHueBase + 0.5) % 1.0, 1.0, 0.65); // Complementario directo
@@ -272,7 +286,8 @@ function renderLoop() {
   const accentMix = clamp01(0.16 + stereoWidthSmooth * 0.34 + pulse * 0.12);
 
   spectralColor.lerp(baseColor, 0.16);
-  const whiteMix = Math.max(0.02, Math.min(0.16, energy * 0.12 + pulse * 0.08 + transient * 0.05 + spectralFluxGate * 0.03));
+  // Reduje el whiteMix dramáticamente para evitar que el centro sea blanco quema corneas
+  const whiteMix = Math.max(0.01, Math.min(0.08, energy * 0.06 + pulse * 0.04));
   liveColor.copy(spectralColor).lerp(WHITE_POINT, whiteMix);
   
   sceneCtx.pointsMaterial.color.lerp(liveColor, 0.14);
@@ -392,11 +407,12 @@ function renderLoop() {
   sceneCtx.noisePoints.position.x = -warpX * 0.9;
   sceneCtx.noisePoints.position.z = -0.2 + warpY * 2.1 + psy.lookDepth * 0.08;
 
-  const targetBloom = Math.max(0.18, Math.min(0.72, 0.22 + subBass * 0.2 + energy * 0.12 + pulse * 0.12 + air * 0.05 + dynamicRangeVisual * 0.04 + plrVisual * 0.05 + loudnessDrift * 0.03 + glitchDrive * 0.02 + spectralFluxGate * 0.03 + env.bloomBoost + psy.depthPulse * 0.035));
+  // Limitador extremo de Bloom
+  const targetBloom = Math.max(0.1, Math.min(0.5, 0.15 + subBass * 0.1 + energy * 0.08 + pulse * 0.08 + air * 0.02 + dynamicRangeVisual * 0.02 + plrVisual * 0.02 + loudnessDrift * 0.02 + glitchDrive * 0.01 + spectralFluxGate * 0.02 + env.bloomBoost * 0.5 + psy.depthPulse * 0.02));
   sceneCtx.bloomPass.strength += (targetBloom - sceneCtx.bloomPass.strength) * 0.06;
-  sceneCtx.bloomPass.radius = Math.max(0.08, Math.min(0.32, 0.1 + treb * 0.12 + pulse * 0.08 + plrVisual * 0.04 + glitchDrive * 0.015 + psy.parallax * 0.01));
-  sceneCtx.bloomPass.threshold = Math.max(0.14, Math.min(0.4, 0.24 + (1.0 - energy) * 0.09 - pulse * 0.04 - dynamicRangeVisual * 0.02 - glitchDrive * 0.01 - psy.depthPulse * 0.01));
-  sceneCtx.bloomPass.strength = Math.min(sceneCtx.bloomPass.strength, 0.68);
+  sceneCtx.bloomPass.radius = Math.max(0.05, Math.min(0.22, 0.08 + treb * 0.08 + pulse * 0.04 + plrVisual * 0.02 + glitchDrive * 0.01 + psy.parallax * 0.01));
+  sceneCtx.bloomPass.threshold = Math.max(0.2, Math.min(0.45, 0.3 + (1.0 - energy) * 0.09 - pulse * 0.02 - dynamicRangeVisual * 0.02 - glitchDrive * 0.01 - psy.depthPulse * 0.01));
+  sceneCtx.bloomPass.strength = Math.min(sceneCtx.bloomPass.strength, 0.5);
 
   const camShake = Math.min(0.07, glitchDrive * 0.014 + transient * 0.012 + plrVisual * 0.01 + psy.depthPulse * 0.012);
   const jitterX = (Math.random() - 0.5) * camShake;
@@ -453,8 +469,8 @@ function renderLoop() {
   sceneCtx.glitchPass.enabled = glitchFrame.enabled && isHeavyPreset;
   sceneCtx.glitchPass.goWild = glitchFrame.goWild && isHeavyPreset;
   
-  // Aberración Cromática Sincronizada y filtrada (<150Hz)
-  const aberrationAmount = isInfernalBass ? (under150HzStereo * 0.055) : 0;
+  // Aberración Cromática controlada drásticamente
+  const aberrationAmount = isInfernalBass ? (under150HzStereo * 0.015) : 0;
   // Smoothing lineal de la aberración para que baje como si fuera fluida
   sceneCtx.rgbShiftPass.uniforms['amount'].value += (aberrationAmount - sceneCtx.rgbShiftPass.uniforms['amount'].value) * 0.2;
   sceneCtx.rgbShiftPass.uniforms['angle'].value = (time * 2.0 + subBass * Math.PI);

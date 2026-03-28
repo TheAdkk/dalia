@@ -51,6 +51,11 @@ impl DaliaEngine {
         self.mashup_controller.start_transition(target);
     }
 
+    pub fn random_preset(&mut self, target_idx: u32) {
+        let target = presets::Preset::from_index(target_idx);
+        self.mashup_controller.start_transition(target);
+    }
+
     pub fn current_preset_index(&self) -> u32 {
         self.mashup_controller.current_preset.index()
     }

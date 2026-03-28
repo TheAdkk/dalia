@@ -22,6 +22,7 @@ export class DaliaEngine {
     next_preset(): void;
     prev_preset(): void;
     process_audio(frequency_data: Uint8Array): void;
+    random_preset(target_idx: number): void;
     toggle_mashup(): void;
 }
 
@@ -48,6 +49,7 @@ export interface InitOutput {
     readonly daliaengine_next_preset: (a: number) => void;
     readonly daliaengine_prev_preset: (a: number) => void;
     readonly daliaengine_process_audio: (a: number, b: number, c: number) => void;
+    readonly daliaengine_random_preset: (a: number, b: number) => void;
     readonly daliaengine_toggle_mashup: (a: number) => void;
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_malloc: (a: number, b: number) => number;

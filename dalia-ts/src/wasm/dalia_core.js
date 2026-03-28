@@ -129,6 +129,12 @@ export class DaliaEngine {
         const len0 = WASM_VECTOR_LEN;
         wasm.daliaengine_process_audio(this.__wbg_ptr, ptr0, len0);
     }
+    /**
+     * @param {number} target_idx
+     */
+    random_preset(target_idx) {
+        wasm.daliaengine_random_preset(this.__wbg_ptr, target_idx);
+    }
     toggle_mashup() {
         wasm.daliaengine_toggle_mashup(this.__wbg_ptr);
     }

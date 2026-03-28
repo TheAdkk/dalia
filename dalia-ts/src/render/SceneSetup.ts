@@ -301,7 +301,7 @@ export function setupWebGL(
   );
 
   const afterimagePass = new AfterimagePass();
-  afterimagePass.uniforms['damp'].value = 0.82;
+  afterimagePass.uniforms['damp'].value = 0.72;
 
   // @ts-ignore: FilmPass signature changes frequently across three.js versions
   const filmPass = new FilmPass(0.45, 0.025, 648, false);
