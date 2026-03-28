@@ -56,6 +56,22 @@ export interface SceneContext {
   rightWasmMemoryView: Float32Array;
 }
 
+function createGlowTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const grd = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grd.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    grd.addColorStop(0.2, 'rgba(255, 255, 255, 0.8)');
+    grd.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
+    grd.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, 64, 64);
+  }
+  return new THREE.CanvasTexture(canvas);
+}
 export function setupWebGL(
   canvas: HTMLCanvasElement,
   engine: DaliaEngine,
@@ -97,12 +113,16 @@ export function setupWebGL(
   const rightGeometry = new THREE.BufferGeometry();
   rightGeometry.setAttribute('position', new THREE.BufferAttribute(rightWasmMemoryView, 3));
 
+  const glowTexture = createGlowTexture();
+
   const pointsMaterial = new THREE.PointsMaterial({
     color: 0xaa55ff,
     size: 0.05,
     blending: THREE.AdditiveBlending,
     transparent: true,
     opacity: 0.62,
+    map: glowTexture,
+    depthWrite: false,
   });
 
   const points = new THREE.Points(geometry, pointsMaterial);
@@ -115,6 +135,7 @@ export function setupWebGL(
     transparent: true,
     opacity: 0.16,
     depthWrite: false,
+    map: glowTexture,
   });
   const centerAccentPoints = new THREE.Points(geometry, centerAccentMaterial);
   scene.add(centerAccentPoints);
@@ -165,6 +186,11 @@ export function setupWebGL(
   rightAccentPoints.position.x = 2.4;
   scene.add(leftAccentPoints);
   scene.add(rightAccentPoints);
+
+  leftPointsMaterial.map = glowTexture;
+  rightPointsMaterial.map = glowTexture;
+  leftAccentMaterial.map = glowTexture;
+  rightAccentMaterial.map = glowTexture;
 
   if (CONFIG.SINGLE_CORE_MODE) {
     leftPoints.visible = false;

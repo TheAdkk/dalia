@@ -473,9 +473,11 @@ function renderLoop() {
 
   const isHeavyPreset = presetIdx > 7;
   const isInfernalBass = under150HzStereo > 0.48; // Disparo desde frecuencias infernales
+  const hasBassTrigger = under150HzStereo > 0.20; // Condicionante base pedido por usuario
   
-  sceneCtx.glitchPass.enabled = glitchFrame.enabled && isHeavyPreset;
-  sceneCtx.glitchPass.goWild = glitchFrame.goWild && isHeavyPreset;
+  // Condición exigida: El Glitch se corta de cuajo (abruptamente) si no hay bajos presentes
+  sceneCtx.glitchPass.enabled = glitchFrame.enabled && isHeavyPreset && hasBassTrigger;
+  sceneCtx.glitchPass.goWild = glitchFrame.goWild && isHeavyPreset && hasBassTrigger;
   
   // Aberración Cromática controlada drásticamente
   const aberrationAmount = isInfernalBass ? (under150HzStereo * 0.015) : 0;
