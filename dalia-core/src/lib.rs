@@ -40,6 +40,19 @@ impl DaliaEngine {
     pub fn get_upper_mid(&self) -> f32 { self.audio_state.upper_mid }
     pub fn get_air(&self)    -> f32 { self.audio_state.air }
     pub fn get_presence(&self) -> f32 { self.audio_state.presence }
+    
+    // Obtiene el tono logarítmico (0.0..1.0) para mapeo a HSL directo basado en el acorde más ruidoso
+    pub fn get_chroma_base(&self) -> f32 {
+        let mut max_val = 0.0;
+        let mut max_idx = 0;
+        for (i, &v) in self.audio_state.chroma.iter().enumerate() {
+            if v > max_val {
+                max_val = v;
+                max_idx = i;
+            }
+        }
+        max_idx as f32 / 12.0
+    }
 
     pub fn next_preset(&mut self) {
         let target = self.mashup_controller.current_preset.next();
@@ -64,8 +77,8 @@ impl DaliaEngine {
         self.next_preset();
     }
 
-    pub fn process_audio(&mut self, frequency_data: &[u8]) {
-        self.audio_state.process_audio(frequency_data, &mut self.processed_data);
+    pub fn process_audio(&mut self, frequency_data: &[u8], hz_per_bin: f32) {
+        self.audio_state.process_audio(frequency_data, &mut self.processed_data, hz_per_bin);
 
         self.time += 0.016;
         self.mashup_controller.update();

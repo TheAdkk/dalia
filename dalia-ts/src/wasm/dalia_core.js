@@ -35,6 +35,13 @@ export class DaliaEngine {
     /**
      * @returns {number}
      */
+    get_chroma_base() {
+        const ret = wasm.daliaengine_get_chroma_base(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
     get_energy() {
         const ret = wasm.daliaengine_get_energy(this.__wbg_ptr);
         return ret;
@@ -123,11 +130,12 @@ export class DaliaEngine {
     }
     /**
      * @param {Uint8Array} frequency_data
+     * @param {number} hz_per_bin
      */
-    process_audio(frequency_data) {
+    process_audio(frequency_data, hz_per_bin) {
         const ptr0 = passArray8ToWasm0(frequency_data, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        wasm.daliaengine_process_audio(this.__wbg_ptr, ptr0, len0);
+        wasm.daliaengine_process_audio(this.__wbg_ptr, ptr0, len0, hz_per_bin);
     }
     /**
      * @param {number} target_idx

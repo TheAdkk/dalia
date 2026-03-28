@@ -9,6 +9,7 @@ pub struct AudioState {
     pub treb:       f32,  // 6k–12k Hz
     pub air:        f32,  // 12k–20k Hz
     pub energy:     f32,
+    pub chroma:     [f32; 12],
 }
 
 impl AudioState {
@@ -16,7 +17,7 @@ impl AudioState {
         Self::default()
     }
 
-    pub fn process_audio(&mut self, frequency_data: &[u8], processed_data: &mut Vec<f32>) {
+    pub fn process_audio(&mut self, frequency_data: &[u8], processed_data: &mut Vec<f32>, hz_per_bin: f32) {
         let len = frequency_data.len();
         if len == 0 { return; }
 
@@ -67,5 +68,27 @@ impl AudioState {
         self.treb      = smooth(self.treb,      band_vals[6]);
         self.air       = smooth(self.air,       band_vals[7]);
         self.energy    = smooth(self.energy,    rms);
+
+        // ─── Generación de Chromagram (Tonalidad Musical) ───
+        if hz_per_bin > 0.0 {
+            let mut new_chroma = [0.0_f32; 12];
+            let mut total_chroma = 0.0_f32;
+            
+            for (i, &mag) in processed_data.iter().enumerate().skip(1) {
+                let f = i as f32 * hz_per_bin;
+                if f >= 27.5 && f <= 4186.0 { // Rango Piano A0 -> C8
+                    let pitch = 69.0 + 12.0 * (f / 440.0).log2();
+                    let pitch_class = (pitch.round() as i32).rem_euclid(12) as usize;
+                    new_chroma[pitch_class] += mag;
+                    total_chroma += mag;
+                }
+            }
+            // Suavizado en tiempo real (evita parpadeos tonales)
+            if total_chroma > 0.0 {
+                for c in 0..12 {
+                    self.chroma[c] = self.chroma[c] * 0.90 + (new_chroma[c] / total_chroma) * 0.10;
+                }
+            }
+        }
     }
 }

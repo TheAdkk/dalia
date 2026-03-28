@@ -58,7 +58,6 @@ let dynamicRangeVisual = 0;
 let plrVisual = 0;
 
 let masterHueBase = Math.random();
-let lastColorHopTime = 0;
 
 // ─── Mashup State ─────────────────────────────────────────────────────────────
 let mashupEnabled = false;
@@ -191,9 +190,13 @@ function renderLoop() {
   spectralFluxGate += (fluxTarget - spectralFluxGate) * 0.24;
 
   // 2. WASM Process Audio
-  engine.process_audio(dataArray);
-  leftEngine.process_audio(leftDataArray);
-  rightEngine.process_audio(rightDataArray);
+  // Calculamos la resolución del bin dependiendo de tu AudioContext
+  const hzPerBin = audioSampleRate / leftFftSize;
+  const hzPerBinRight = audioSampleRate / rightFftSize;
+  
+  engine.process_audio(dataArray, hzPerBin);
+  leftEngine.process_audio(leftDataArray, hzPerBin);
+  rightEngine.process_audio(rightDataArray, hzPerBinRight);
 
   sceneCtx.geometry.attributes.position.needsUpdate = true;
   sceneCtx.leftGeometry.attributes.position.needsUpdate = true;
@@ -268,11 +271,16 @@ function renderLoop() {
   });
 
   // 4. Update Colors & Scene Items
-  // Color Hop Logic on big musical hits
-  if ((transient > 0.8 || pulse > 0.8 || spectralFluxGate > 0.8) && (nowMs - lastColorHopTime > 1500)) {
-    masterHueBase = (masterHueBase + 0.6180339887) % 1.0;
-    lastColorHopTime = nowMs;
-  }
+  
+  // Extraer Tonalidad Directa de Rust (El Note Pitch mayoritario del Acorde actual)
+  const detectedHue = engine.get_chroma_base();
+
+  // Color Hop Logic orgánico: en lugar de giros aleatorios al azar, Dalia desliza sus pigmentos 
+  // armónicamente buscando siempre empatar con la escala de la canción. 
+  // En las transiciones de canciones violentas, se adapta rápidamente, pero decae lento para no parpadear con distorsiones vocales menores.
+  const adaptSpeed = (transient > 0.8 || pulse > 0.8) ? 0.08 : 0.008;
+  masterHueBase += (detectedHue - masterHueBase) * adaptSpeed;
+  masterHueBase = (masterHueBase % 1.0 + 1.0) % 1.0; // clamp seguro circular
 
   const dynamicSaturation = Math.max(0.65, Math.min(1.0, 0.7 + treb * 0.3));
   const dynamicLightness = Math.max(0.25, Math.min(0.55, 0.4 + energy * 0.15));

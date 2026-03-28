@@ -7,6 +7,7 @@ export class DaliaEngine {
     current_preset_index(): number;
     get_air(): number;
     get_bass(): number;
+    get_chroma_base(): number;
     get_energy(): number;
     get_geometry_len(): number;
     get_geometry_ptr(): number;
@@ -21,7 +22,7 @@ export class DaliaEngine {
     constructor();
     next_preset(): void;
     prev_preset(): void;
-    process_audio(frequency_data: Uint8Array): void;
+    process_audio(frequency_data: Uint8Array, hz_per_bin: number): void;
     random_preset(target_idx: number): void;
     toggle_mashup(): void;
 }
@@ -34,6 +35,7 @@ export interface InitOutput {
     readonly daliaengine_current_preset_index: (a: number) => number;
     readonly daliaengine_get_air: (a: number) => number;
     readonly daliaengine_get_bass: (a: number) => number;
+    readonly daliaengine_get_chroma_base: (a: number) => number;
     readonly daliaengine_get_energy: (a: number) => number;
     readonly daliaengine_get_geometry_len: (a: number) => number;
     readonly daliaengine_get_geometry_ptr: (a: number) => number;
@@ -48,7 +50,7 @@ export interface InitOutput {
     readonly daliaengine_new: () => number;
     readonly daliaengine_next_preset: (a: number) => void;
     readonly daliaengine_prev_preset: (a: number) => void;
-    readonly daliaengine_process_audio: (a: number, b: number, c: number) => void;
+    readonly daliaengine_process_audio: (a: number, b: number, c: number, d: number) => void;
     readonly daliaengine_random_preset: (a: number, b: number) => void;
     readonly daliaengine_toggle_mashup: (a: number) => void;
     readonly __wbindgen_externrefs: WebAssembly.Table;
