@@ -13,8 +13,6 @@ import { setupWebGL, type SceneContext } from './render/SceneSetup';
 // ─── Constants ───────────────────────────────────────────────────────────────
 const liveColor = new THREE.Color('#AA55FF');
 const spectralColor = new THREE.Color('#AA55FF');
-const LEFT_TINT = new THREE.Color('#32D7FF');
-const RIGHT_TINT = new THREE.Color('#FF9A36');
 const leftLiveColor = new THREE.Color('#32D7FF');
 const rightLiveColor = new THREE.Color('#FF9A36');
 const accentColorA = new THREE.Color('#FFD84A');
@@ -58,6 +56,9 @@ let loudnessPeakDb = -60;
 let loudnessFloorDb = -60;
 let dynamicRangeVisual = 0;
 let plrVisual = 0;
+
+let masterHueBase = Math.random();
+let lastColorHopTime = 0;
 
 // ─── Mashup State ─────────────────────────────────────────────────────────────
 let mashupEnabled = false;
@@ -186,9 +187,7 @@ function renderLoop() {
 
   // 3. Audio Metrics
   const bass = engine.get_bass();
-  const lowMid = engine.get_low_mid();
   const mid = engine.get_mid();
-  const upperMid = engine.get_upper_mid();
   const treb = engine.get_treb();
   const energy = engine.get_energy();
   const subBass = engine.get_sub_bass();
@@ -255,35 +254,39 @@ function renderLoop() {
   });
 
   // 4. Update Colors & Scene Items
-  const spectralBands = [subBass, bass, lowMid, mid, upperMid, presence, treb, air];
-  let weighted = 0, total = 0;
-  for (let i = 0; i < spectralBands.length; i++) {
-    const value = Math.max(0.0001, spectralBands[i]);
-    weighted += i * value;
-    total += value;
+  // Color Hop Logic on big musical hits
+  if ((transient > 0.8 || pulse > 0.8 || spectralFluxGate > 0.8) && (nowMs - lastColorHopTime > 1500)) {
+    masterHueBase = (masterHueBase + 0.6180339887) % 1.0;
+    lastColorHopTime = nowMs;
   }
-  const centroid = total > 0 ? (weighted / total) : 0;
-  const paletteIndex = Math.max(0, Math.min(CONFIG.SPECTRAL_PALETTE.length - 1, Math.round(centroid)));
-  const nextPaletteIndex = Math.max(0, Math.min(CONFIG.SPECTRAL_PALETTE.length - 1, paletteIndex + (stereoBalanceSmooth > 0.5 ? 1 : -1)));
+
+  const dynamicSaturation = Math.max(0.65, Math.min(1.0, 0.7 + treb * 0.3));
+  const dynamicLightness = Math.max(0.45, Math.min(0.8, 0.5 + energy * 0.3));
+  
+  const baseColor = new THREE.Color().setHSL(masterHueBase, dynamicSaturation, dynamicLightness);
+  const accentAColor = new THREE.Color().setHSL((masterHueBase + 0.5) % 1.0, 1.0, 0.65); // Complementario directo
+  const accentBColor = new THREE.Color().setHSL((masterHueBase + 0.15) % 1.0, 1.0, 0.65); // Análogo o Split Complementario
+  const leftColor = new THREE.Color().setHSL((masterHueBase + 0.33) % 1.0, dynamicSaturation, dynamicLightness);
+  const rightColor = new THREE.Color().setHSL((masterHueBase + 0.66) % 1.0, dynamicSaturation, dynamicLightness);
+
   const accentMix = clamp01(0.16 + stereoWidthSmooth * 0.34 + pulse * 0.12);
 
-  const paletteColorHex = new THREE.Color(CONFIG.SPECTRAL_PALETTE[paletteIndex]);
-  spectralColor.lerp(paletteColorHex, 0.16);
+  spectralColor.lerp(baseColor, 0.16);
   const whiteMix = Math.max(0.02, Math.min(0.16, energy * 0.12 + pulse * 0.08 + transient * 0.05 + spectralFluxGate * 0.03));
   liveColor.copy(spectralColor).lerp(WHITE_POINT, whiteMix);
   
   sceneCtx.pointsMaterial.color.lerp(liveColor, 0.14);
-  sceneCtx.centerAccentMaterial.color.copy(new THREE.Color(CONFIG.SPECTRAL_PALETTE[nextPaletteIndex])).lerp(accentColorB, accentMix * 0.2);
+  sceneCtx.centerAccentMaterial.color.copy(accentBColor).lerp(accentColorB, accentMix * 0.2);
   sceneCtx.centerAccentMaterial.opacity = clamp01(0.05 + plrVisual * 0.12 + stereoWidthSmooth * 0.08);
   sceneCtx.centerAccentMaterial.size = Math.max(0.014, sceneCtx.pointsMaterial.size * (0.62 + pulse * 0.16));
 
-  leftLiveColor.copy(spectralColor).lerp(LEFT_TINT, clamp01(0.14 + stereoWidthSmooth * 0.42 + leftEnergySmooth * 0.18));
-  rightLiveColor.copy(spectralColor).lerp(RIGHT_TINT, clamp01(0.14 + stereoWidthSmooth * 0.42 + rightEnergySmooth * 0.18));
+  leftLiveColor.copy(spectralColor).lerp(leftColor, clamp01(0.14 + stereoWidthSmooth * 0.42 + leftEnergySmooth * 0.18));
+  rightLiveColor.copy(spectralColor).lerp(rightColor, clamp01(0.14 + stereoWidthSmooth * 0.42 + rightEnergySmooth * 0.18));
   sceneCtx.leftPointsMaterial.color.lerp(leftLiveColor, 0.16);
   sceneCtx.rightPointsMaterial.color.lerp(rightLiveColor, 0.16);
 
-  sceneCtx.leftAccentMaterial.color.copy(new THREE.Color(CONFIG.SPECTRAL_PALETTE[Math.max(0, paletteIndex - 1)])).lerp(accentColorA, clamp01(0.2 + leftEnergySmooth * 0.4));
-  sceneCtx.rightAccentMaterial.color.copy(new THREE.Color(CONFIG.SPECTRAL_PALETTE[Math.min(CONFIG.SPECTRAL_PALETTE.length - 1, paletteIndex + 1)])).lerp(accentColorA, clamp01(0.2 + rightEnergySmooth * 0.4));
+  sceneCtx.leftAccentMaterial.color.copy(accentAColor).lerp(accentColorA, clamp01(0.2 + leftEnergySmooth * 0.4));
+  sceneCtx.rightAccentMaterial.color.copy(accentBColor).lerp(accentColorA, clamp01(0.2 + rightEnergySmooth * 0.4));
   sceneCtx.leftAccentMaterial.opacity = clamp01(0.05 + leftEnergySmooth * 0.14 + stereoWidthSmooth * 0.08);
   sceneCtx.rightAccentMaterial.opacity = clamp01(0.05 + rightEnergySmooth * 0.14 + stereoWidthSmooth * 0.08);
 
@@ -444,9 +447,19 @@ function renderLoop() {
   sceneCtx.leftPoints.rotation.z = -feedbackWarp * 0.24 - psy.coreTwist * 0.02;
   sceneCtx.rightPoints.rotation.z = feedbackWarp * 0.24 + psy.coreTwist * 0.02;
 
-  sceneCtx.glitchPass.enabled = glitchFrame.enabled;
-  sceneCtx.glitchPass.goWild = glitchFrame.goWild;
-  const jitter = glitchFrame.jitter;
+  const isHeavyPreset = presetIdx > 7;
+  const isInfernalBass = under150HzStereo > 0.48; // Disparo desde frecuencias infernales
+  
+  sceneCtx.glitchPass.enabled = glitchFrame.enabled && isHeavyPreset;
+  sceneCtx.glitchPass.goWild = glitchFrame.goWild && isHeavyPreset;
+  
+  // Aberración Cromática Sincronizada y filtrada (<150Hz)
+  const aberrationAmount = isInfernalBass ? (under150HzStereo * 0.055) : 0;
+  // Smoothing lineal de la aberración para que baje como si fuera fluida
+  sceneCtx.rgbShiftPass.uniforms['amount'].value += (aberrationAmount - sceneCtx.rgbShiftPass.uniforms['amount'].value) * 0.2;
+  sceneCtx.rgbShiftPass.uniforms['angle'].value = (time * 2.0 + subBass * Math.PI);
+  
+  const jitter = isHeavyPreset ? glitchFrame.jitter : 0.0;
   sceneCtx.points.position.x = panShift * 0.24 + psy.lateralDrift * 0.32 + (Math.random() - 0.5) * jitter;
   sceneCtx.points.position.y = psy.coreLift * 0.16 + (Math.random() - 0.5) * jitter * 0.6;
 

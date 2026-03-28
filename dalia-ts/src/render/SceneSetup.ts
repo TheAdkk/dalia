@@ -2,7 +2,11 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { FilmPass } from 'three/examples/jsm/postprocessing/FilmPass.js';
+import { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass.js';
 import { GlitchPass } from 'three/examples/jsm/postprocessing/GlitchPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { RGBShiftShader } from 'three/examples/jsm/shaders/RGBShiftShader.js';
 import { createGlitchController, type GlitchController } from '../visual/glitchController';
 import { CONFIG } from '../core/config';
 import type { DaliaEngine, InitOutput } from '../wasm/dalia_core.js';
@@ -16,7 +20,10 @@ export interface SceneContext {
   rightGeometry: THREE.BufferGeometry;
   composer: EffectComposer;
   bloomPass: UnrealBloomPass;
+  filmPass: FilmPass;
+  afterimagePass: AfterimagePass;
   glitchPass: GlitchPass;
+  rgbShiftPass: ShaderPass;
   glitchController: GlitchController;
   pointsMaterial: THREE.PointsMaterial;
   points: THREE.Points;
@@ -293,18 +300,31 @@ export function setupWebGL(
     0.42, 0.18, 0.2
   );
 
+  const afterimagePass = new AfterimagePass();
+  afterimagePass.uniforms['damp'].value = 0.82;
+
+  // @ts-ignore: FilmPass signature changes frequently across three.js versions
+  const filmPass = new FilmPass(0.45, 0.025, 648, false);
+
   const composer = new EffectComposer(renderer);
   composer.addPass(renderScene);
+  composer.addPass(afterimagePass);
   composer.addPass(bloomPass);
+  composer.addPass(filmPass);
 
   const glitchPass = new GlitchPass();
   glitchPass.enabled = false;
+  
+  const rgbShiftPass = new ShaderPass(RGBShiftShader);
+  rgbShiftPass.uniforms['amount'].value = 0.0;
+  
   composer.addPass(glitchPass);
+  composer.addPass(rgbShiftPass);
   const glitchController = createGlitchController(CONFIG.GLITCH_PROFILE);
 
   return {
-    renderer, camera, scene, geometry, leftGeometry, rightGeometry, composer, bloomPass,
-    glitchPass, glitchController, pointsMaterial, points, centerAccentMaterial, centerAccentPoints,
+    renderer, camera, scene, geometry, leftGeometry, rightGeometry, composer, bloomPass, filmPass, afterimagePass,
+    glitchPass, rgbShiftPass, glitchController, pointsMaterial, points, centerAccentMaterial, centerAccentPoints,
     leftPointsMaterial, rightPointsMaterial, leftPoints, rightPoints, leftAccentMaterial, rightAccentMaterial,
     leftAccentPoints, rightAccentPoints, textureMaterial, texturePoints, noiseMaterial, noisePoints,
     tunnelGeometry, tunnelMaterial, tunnelPoints, tunnelPositions, sparkRingMaterial, sparkRingPoints,

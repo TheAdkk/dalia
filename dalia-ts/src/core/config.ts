@@ -12,6 +12,11 @@ export const CONFIG = {
     'Galactic Web',
     'Voxel Grid',
     'Morphing Cube',
+    'Heart Pulse',
+    'Black Hole Singularity',
+    'Tesseract Fold',
+    'Hyperspace Jump',
+    'Wormhole Bridge',
   ],
   SPECTRAL_PALETTE: [
     '#08120A', '#18BF34', '#B8E61F', '#FFB11A',

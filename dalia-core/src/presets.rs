@@ -12,6 +12,11 @@ pub enum Preset {
     GalacticWeb,
     VoxelGrid,
     MorphingCube,
+    HeartPulse,
+    BlackHoleSingularity,
+    TesseractFold,
+    HyperspaceJump,
+    WormholeBridge,
 }
 
 impl Preset {
@@ -28,13 +33,18 @@ impl Preset {
             Preset::QuantumString       => Preset::GalacticWeb,
             Preset::GalacticWeb         => Preset::VoxelGrid,
             Preset::VoxelGrid           => Preset::MorphingCube,
-            Preset::MorphingCube        => Preset::VectorSphere,
+            Preset::MorphingCube        => Preset::HeartPulse,
+            Preset::HeartPulse          => Preset::BlackHoleSingularity,
+            Preset::BlackHoleSingularity=> Preset::TesseractFold,
+            Preset::TesseractFold       => Preset::HyperspaceJump,
+            Preset::HyperspaceJump      => Preset::WormholeBridge,
+            Preset::WormholeBridge      => Preset::VectorSphere,
         }
     }
 
     pub fn prev(self) -> Preset {
         match self {
-            Preset::VectorSphere         => Preset::MorphingCube,
+            Preset::VectorSphere         => Preset::WormholeBridge,
             Preset::MutantTorus          => Preset::VectorSphere,
             Preset::LissajousKnot        => Preset::MutantTorus,
             Preset::PlasmaField          => Preset::LissajousKnot,
@@ -46,6 +56,11 @@ impl Preset {
             Preset::GalacticWeb          => Preset::QuantumString,
             Preset::VoxelGrid            => Preset::GalacticWeb,
             Preset::MorphingCube         => Preset::VoxelGrid,
+            Preset::HeartPulse           => Preset::MorphingCube,
+            Preset::BlackHoleSingularity => Preset::HeartPulse,
+            Preset::TesseractFold        => Preset::BlackHoleSingularity,
+            Preset::HyperspaceJump       => Preset::TesseractFold,
+            Preset::WormholeBridge       => Preset::HyperspaceJump,
         }
     }
 
@@ -63,11 +78,16 @@ impl Preset {
             Preset::GalacticWeb          => 9,
             Preset::VoxelGrid            => 10,
             Preset::MorphingCube         => 11,
+            Preset::HeartPulse           => 12,
+            Preset::BlackHoleSingularity => 13,
+            Preset::TesseractFold        => 14,
+            Preset::HyperspaceJump       => 15,
+            Preset::WormholeBridge       => 16,
         }
     }
 
     pub fn from_index(i: u32) -> Preset {
-        match i % 12 {
+        match i % 17 {
             0  => Preset::VectorSphere,
             1  => Preset::MutantTorus,
             2  => Preset::LissajousKnot,
@@ -79,7 +99,12 @@ impl Preset {
             8  => Preset::QuantumString,
             9  => Preset::GalacticWeb,
             10 => Preset::VoxelGrid,
-            _  => Preset::MorphingCube,
+            11 => Preset::MorphingCube,
+            12 => Preset::HeartPulse,
+            13 => Preset::BlackHoleSingularity,
+            14 => Preset::TesseractFold,
+            15 => Preset::HyperspaceJump,
+            _  => Preset::WormholeBridge,
         }
     }
 }

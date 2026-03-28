@@ -18,6 +18,11 @@ pub fn vertex(index: usize, preset: Preset, audio: &AudioState, time: f32) -> (f
         Preset::GalacticWeb          => vertex_galactic_web(index, audio, time),
         Preset::VoxelGrid            => vertex_voxel_grid(index, audio, time),
         Preset::MorphingCube         => vertex_morphing_cube(index, audio, time),
+        Preset::HeartPulse           => vertex_heart_pulse(index, audio, time),
+        Preset::BlackHoleSingularity => vertex_black_hole_singularity(index, audio, time),
+        Preset::TesseractFold        => vertex_tesseract_fold(index, audio, time),
+        Preset::HyperspaceJump       => vertex_hyperspace_jump(index, audio, time),
+        Preset::WormholeBridge       => vertex_wormhole_bridge(index, audio, time),
     }
 }
 
@@ -303,4 +308,159 @@ fn vertex_morphing_cube(index: usize, audio: &AudioState, time: f32) -> (f32, f3
     let jagged = audio.treb * 0.5 * (f * 99.9).sin();
     
     (x * scale + jagged, y * scale, z * scale + jagged)
+}
+
+fn vertex_heart_pulse(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    let f = index as f32;
+    let n = NUM_VERTICES as f32;
+    
+    // Julia/Taubin parametric mapping
+    let u = (f / n) * std::f32::consts::TAU * 40.0;
+    let v = (f / n) * std::f32::consts::PI;
+
+    // Heart geometry
+    let x_base = v.sin() * (15.0 * u.sin() - 4.0 * (3.0 * u).sin());
+    let y_base = 8.0 * v.cos();
+    let z_base = v.sin() * (15.0 * u.cos() - 5.0 * (2.0 * u).cos() - 2.0 * (3.0 * u).cos() - (4.0 * u).cos());
+
+    // Scale dynamically
+    let scale = 0.45 + (audio.sub_bass * 0.4);
+    
+    let mut x = x_base * scale;
+    let mut y = z_base * scale; // Swap to stand up
+    let mut z = y_base * scale; 
+
+    // Diastolic/Systolic Pumping
+    let pump = 1.0 + audio.bass * 1.5 * (time * 12.0).sin().max(0.0);
+    x *= pump; y *= pump; z *= pump;
+
+    // Aortic noise
+    let noise = audio.treb * 0.5 * (f * 13.0).sin();
+
+    (x + noise, y + noise, z + noise)
+}
+
+fn vertex_black_hole_singularity(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    let f = index as f32;
+    let n = NUM_VERTICES as f32;
+    
+    // Spiral distribution towards center
+    let radius = 1.0 + (f / n).powf(0.8) * 35.0;
+    let angle = f * 137.5 + time * (10.0 / radius); 
+
+    let mut x = angle.cos() * radius;
+    let mut y = (f * 99.0).sin() * 0.4; // Disk thickness
+    let mut z = angle.sin() * radius;
+
+    // Relativistic Lensing (Einstein Ring effect)
+    let r_sq = x*x + y*y + z*z;
+    let schwarzschild = 1.8 + audio.sub_bass;
+    let lens_factor = schwarzschild / (r_sq.sqrt() + 0.1);
+
+    if radius < 3.0 + audio.bass {
+        // Event Horizon Drop
+        y -= (3.0 - radius) * 5.0 * audio.energy;
+    } else {
+        // Space bending warp
+        y += lens_factor * 8.0 * angle.sin();
+    }
+
+    let jitter = audio.treb * 1.5 * (f * 2.0).cos();
+
+    (x + jitter, y, z + jitter)
+}
+
+fn vertex_tesseract_fold(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    let f = index as f32;
+    
+    // 4D Space pseudo random vertices
+    let mut x4 = ((f * 1.3).cos() * 2.0).round();
+    let mut y4 = ((f * 1.7).sin() * 2.0).round();
+    let mut z4 = ((f * 2.3).cos() * 2.0).round();
+    let mut w4 = ((f * 3.1).sin() * 2.0).round();
+
+    let t = (f / NUM_VERTICES as f32 * 100.0).fract();
+    if f % 4.0 == 0.0 { x4 *= t; }
+    else if f % 4.0 == 1.0 { y4 *= t; }
+    else if f % 4.0 == 2.0 { z4 *= t; }
+    else { w4 *= t; }
+
+    // Hyper-Rotations 
+    let theta = time * 0.6 + audio.energy;
+    let phi = time * 0.4 + audio.bass;
+
+    // Rotate XW plane
+    let nx = x4 * theta.cos() - w4 * theta.sin();
+    let nw = x4 * theta.sin() + w4 * theta.cos();
+    x4 = nx;
+    w4 = nw;
+
+    // Rotate YZ plane
+    let ny = y4 * phi.cos() - z4 * phi.sin();
+    let nz = y4 * phi.sin() + z4 * phi.cos();
+    y4 = ny;
+    z4 = nz;
+
+    // Stereographic Projection to 3D
+    let distance = 3.5 + audio.sub_bass;
+    let w_factor = distance / (distance - w4);
+
+    let mut x3 = x4 * w_factor;
+    let mut y3 = y4 * w_factor;
+    let mut z3 = z4 * w_factor;
+
+    // Universal Scaling
+    let scale = 3.5 + audio.mid * 2.0;
+
+    (x3 * scale, y3 * scale, z3 * scale)
+}
+
+fn vertex_hyperspace_jump(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    let f = index as f32;
+    let angle = (f * 13.0).fract() * std::f32::consts::TAU;
+    let radius = 1.0 + (f * 7.0).fract() * 15.0;
+    
+    // Near-infinite speed Z scrolling
+    let speed = 40.0 + audio.energy * 250.0;
+    let mut z = 50.0 - ((f * 3.0).fract() * 100.0 + time * speed) % 100.0;
+    
+    let warp = audio.sub_bass * 40.0 / (z.abs() + 1.0);
+    
+    let mut x = angle.cos() * (radius + warp);
+    let mut y = angle.sin() * (radius + warp);
+
+    // Epileptic Strobe behavior
+    if audio.presence > 0.75 && (f as usize % 3 == 0) {
+        x *= 1.8;
+        y *= 1.8;
+        z += 15.0;
+    }
+
+    (x, y, z)
+}
+
+fn vertex_wormhole_bridge(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    let f = index as f32;
+    let n = NUM_VERTICES as f32;
+    
+    let u = (f / n) * std::f32::consts::TAU * 12.0;
+    let v = (f / n * 17.0).fract() * std::f32::consts::TAU;
+
+    // Tube radius
+    let r = 1.5 + u.cos() * 1.5 + audio.bass * 2.5;
+    
+    let mut x = r * v.cos();
+    let mut z = r * v.sin();
+    let y = u.sin() * 20.0; 
+
+    // Space bend
+    let bend = time.sin() * 0.8 + audio.bass * 0.7;
+    x += y * bend;
+
+    // Torsion twist
+    let torsion_angle = y * 0.15 + time * 1.5;
+    let nx = x * torsion_angle.cos() - z * torsion_angle.sin();
+    let nz = x * torsion_angle.sin() + z * torsion_angle.cos();
+
+    (nx, y, nz)
 }
