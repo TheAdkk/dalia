@@ -17,6 +17,9 @@ export const CONFIG = {
     'Tesseract Fold',
     'Hyperspace Jump',
     'Wormhole Bridge',
+    'Supernova Remnant',
+    'Andromeda Spiral',
+    'Gamma-Ray Pulsar',
   ],
   SPECTRAL_PALETTE: [
     '#08120A', '#18BF34', '#B8E61F', '#FFB11A',

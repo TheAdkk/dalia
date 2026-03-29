@@ -65,7 +65,31 @@ const PRESET_SIGNATURES: PresetSignature[] = [
   // Nebula Vortex
   { breatheHz: 2.55, swingHz: 1.55, phase: 4.6, scaleBase: 0.09, scaleBeat: 0.45, scaleRush: 0.3, liftGain: 0.74, twistGain: 1.58, driftGain: 0.86, orbitGain: 1.36, zoomGain: 0.98, lookGain: 1.12, rollGain: 1.25, tunnelGain: 1.2, spinGain: 1.54, warpGain: 1.62, parallaxGain: 1.26 },
   // Chaos Ribbon
-  { breatheHz: 2.85, swingHz: 1.85, phase: 5.3, scaleBase: 0.1, scaleBeat: 0.52, scaleRush: 0.36, liftGain: 0.84, twistGain: 1.82, driftGain: 1.05, orbitGain: 1.62, zoomGain: 1.12, lookGain: 1.34, rollGain: 1.44, tunnelGain: 1.36, spinGain: 1.76, warpGain: 1.86, parallaxGain: 1.42 },
+  { breatheHz: 2.35, swingHz: 2.75, phase: 5.3, scaleBase: 0.09, scaleBeat: 0.56, scaleRush: 0.44, liftGain: 0.92, twistGain: 1.95, driftGain: 1.38, orbitGain: 1.84, zoomGain: 1.26, lookGain: 1.46, rollGain: 1.86, tunnelGain: 1.22, spinGain: 1.44, warpGain: 1.64, parallaxGain: 1.58 },
+  // Quantum String
+  { breatheHz: 3.85, swingHz: 1.28, phase: 5.9, scaleBase: 0.12, scaleBeat: 0.42, scaleRush: 0.5, liftGain: 0.62, twistGain: 1.28, driftGain: 0.54, orbitGain: 1.08, zoomGain: 1.42, lookGain: 1.18, rollGain: 0.78, tunnelGain: 1.86, spinGain: 2.08, warpGain: 2.24, parallaxGain: 1.12 },
+  // Galactic Web
+  { breatheHz: 1.35, swingHz: 0.55, phase: 6.5, scaleBase: 0.04, scaleBeat: 0.26, scaleRush: 0.09, liftGain: 0.3, twistGain: 0.68, driftGain: 0.22, orbitGain: 0.48, zoomGain: 0.4, lookGain: 0.44, rollGain: 0.4, tunnelGain: 0.62, spinGain: 0.66, warpGain: 0.88, parallaxGain: 0.74 },
+  // Voxel Grid
+  { breatheHz: 1.95, swingHz: 0.46, phase: 7.1, scaleBase: 0.045, scaleBeat: 0.27, scaleRush: 0.1, liftGain: 0.32, twistGain: 0.66, driftGain: 0.14, orbitGain: 0.42, zoomGain: 0.36, lookGain: 0.52, rollGain: 0.34, tunnelGain: 0.92, spinGain: 0.58, warpGain: 0.86, parallaxGain: 0.72 },
+  // Morphing Cube
+  { breatheHz: 0.95, swingHz: 0.42, phase: 7.7, scaleBase: 0.02, scaleBeat: 0.24, scaleRush: 0.06, liftGain: 0.24, twistGain: 0.56, driftGain: 0.16, orbitGain: 0.34, zoomGain: 0.28, lookGain: 0.4, rollGain: 0.26, tunnelGain: 0.52, spinGain: 0.44, warpGain: 0.62, parallaxGain: 0.58 },
+  // Heart Pulse
+  { breatheHz: 1.28, swingHz: 2.6, phase: 8.2, scaleBase: 0.1, scaleBeat: 0.62, scaleRush: 0.12, liftGain: 0.88, twistGain: 0.42, driftGain: 0.12, orbitGain: 0.28, zoomGain: 0.74, lookGain: 0.7, rollGain: 0.22, tunnelGain: 0.42, spinGain: 0.36, warpGain: 0.58, parallaxGain: 0.64 },
+  // Black Hole Singularity
+  { breatheHz: 1.92, swingHz: 0.64, phase: 8.9, scaleBase: 0.07, scaleBeat: 0.34, scaleRush: 0.3, liftGain: 0.52, twistGain: 1.08, driftGain: 0.34, orbitGain: 0.92, zoomGain: 0.96, lookGain: 1.44, rollGain: 0.54, tunnelGain: 1.64, spinGain: 1.2, warpGain: 2.22, parallaxGain: 0.94 },
+  // Tesseract Fold
+  { breatheHz: 2.62, swingHz: 1.86, phase: 9.5, scaleBase: 0.1, scaleBeat: 0.4, scaleRush: 0.36, liftGain: 0.72, twistGain: 2.12, driftGain: 0.66, orbitGain: 1.42, zoomGain: 0.86, lookGain: 1.08, rollGain: 1.48, tunnelGain: 1.18, spinGain: 2.04, warpGain: 1.54, parallaxGain: 1.28 },
+  // Hyperspace Jump
+  { breatheHz: 3.15, swingHz: 2.1, phase: 10.1, scaleBase: 0.12, scaleBeat: 0.54, scaleRush: 0.4, liftGain: 0.88, twistGain: 2.04, driftGain: 1.18, orbitGain: 1.88, zoomGain: 1.24, lookGain: 1.46, rollGain: 1.58, tunnelGain: 1.62, spinGain: 1.98, warpGain: 2.06, parallaxGain: 1.46 },
+  // Wormhole Bridge
+  { breatheHz: 2.18, swingHz: 1.22, phase: 10.7, scaleBase: 0.09, scaleBeat: 0.4, scaleRush: 0.26, liftGain: 0.62, twistGain: 1.26, driftGain: 0.48, orbitGain: 0.96, zoomGain: 0.9, lookGain: 0.98, rollGain: 0.72, tunnelGain: 2.28, spinGain: 2.26, warpGain: 1.96, parallaxGain: 1.44 },
+  // Supernova Remnant
+  { breatheHz: 3.28, swingHz: 2.46, phase: 11.3, scaleBase: 0.14, scaleBeat: 0.62, scaleRush: 0.46, liftGain: 1.12, twistGain: 1.52, driftGain: 1.18, orbitGain: 2.18, zoomGain: 1.36, lookGain: 1.34, rollGain: 1.02, tunnelGain: 1.08, spinGain: 1.22, warpGain: 1.62, parallaxGain: 1.68 },
+  // Andromeda Spiral
+  { breatheHz: 1.75, swingHz: 0.98, phase: 12.0, scaleBase: 0.06, scaleBeat: 0.31, scaleRush: 0.2, liftGain: 0.46, twistGain: 1.08, driftGain: 0.54, orbitGain: 1.02, zoomGain: 0.7, lookGain: 0.84, rollGain: 0.88, tunnelGain: 0.96, spinGain: 1.1, warpGain: 1.26, parallaxGain: 1.02 },
+  // Gamma-Ray Pulsar
+  { breatheHz: 3.35, swingHz: 2.35, phase: 12.6, scaleBase: 0.13, scaleBeat: 0.58, scaleRush: 0.42, liftGain: 0.92, twistGain: 2.18, driftGain: 1.06, orbitGain: 1.94, zoomGain: 1.26, lookGain: 1.52, rollGain: 1.66, tunnelGain: 1.72, spinGain: 2.12, warpGain: 2.18, parallaxGain: 1.48 },
 ];
 
 function clamp01(value: number): number {

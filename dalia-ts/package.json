@@ -6,13 +6,16 @@
     "dev": "vite",
     "build:wasm": "cd ../dalia-core && wasm-pack build --target web && cd ../dalia-ts && node -e \"const fs=require('fs'); ['dalia_core.js','dalia_core.d.ts','dalia_core_bg.wasm'].forEach(f=>fs.copyFileSync('../dalia-core/pkg/'+f,'src/wasm/'+f))\"",
     "build": "npm run build:wasm && tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/node": "^25.4.0",
     "@types/three": "^0.183.1",
     "typescript": "~5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.1.2"
   },
   "dependencies": {
     "three": "^0.183.2",
