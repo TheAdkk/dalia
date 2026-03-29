@@ -17,6 +17,9 @@ pub enum Preset {
     TesseractFold,
     HyperspaceJump,
     WormholeBridge,
+    SupernovaRemnant,
+    AndromedaSpiral,
+    GammaRayPulsar,
 }
 
 impl Preset {
@@ -38,13 +41,16 @@ impl Preset {
             Preset::BlackHoleSingularity=> Preset::TesseractFold,
             Preset::TesseractFold       => Preset::HyperspaceJump,
             Preset::HyperspaceJump      => Preset::WormholeBridge,
-            Preset::WormholeBridge      => Preset::VectorSphere,
+            Preset::WormholeBridge      => Preset::SupernovaRemnant,
+            Preset::SupernovaRemnant    => Preset::AndromedaSpiral,
+            Preset::AndromedaSpiral     => Preset::GammaRayPulsar,
+            Preset::GammaRayPulsar      => Preset::VectorSphere,
         }
     }
 
     pub fn prev(self) -> Preset {
         match self {
-            Preset::VectorSphere         => Preset::WormholeBridge,
+            Preset::VectorSphere         => Preset::GammaRayPulsar,
             Preset::MutantTorus          => Preset::VectorSphere,
             Preset::LissajousKnot        => Preset::MutantTorus,
             Preset::PlasmaField          => Preset::LissajousKnot,
@@ -61,6 +67,9 @@ impl Preset {
             Preset::TesseractFold        => Preset::BlackHoleSingularity,
             Preset::HyperspaceJump       => Preset::TesseractFold,
             Preset::WormholeBridge       => Preset::HyperspaceJump,
+            Preset::SupernovaRemnant     => Preset::WormholeBridge,
+            Preset::AndromedaSpiral      => Preset::SupernovaRemnant,
+            Preset::GammaRayPulsar       => Preset::AndromedaSpiral,
         }
     }
 
@@ -83,11 +92,14 @@ impl Preset {
             Preset::TesseractFold        => 14,
             Preset::HyperspaceJump       => 15,
             Preset::WormholeBridge       => 16,
+            Preset::SupernovaRemnant     => 17,
+            Preset::AndromedaSpiral      => 18,
+            Preset::GammaRayPulsar       => 19,
         }
     }
 
     pub fn from_index(i: u32) -> Preset {
-        match i % 17 {
+        match i % 20 {
             0  => Preset::VectorSphere,
             1  => Preset::MutantTorus,
             2  => Preset::LissajousKnot,
@@ -104,7 +116,51 @@ impl Preset {
             13 => Preset::BlackHoleSingularity,
             14 => Preset::TesseractFold,
             15 => Preset::HyperspaceJump,
-            _  => Preset::WormholeBridge,
+            16 => Preset::WormholeBridge,
+            17 => Preset::SupernovaRemnant,
+            18 => Preset::AndromedaSpiral,
+            _  => Preset::GammaRayPulsar,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Preset;
+
+    #[test]
+    fn index_roundtrip_matches_all_variants() {
+        for i in 0..20_u32 {
+            let preset = Preset::from_index(i);
+            assert_eq!(preset.index(), i);
+        }
+
+        assert_eq!(Preset::from_index(20), Preset::VectorSphere);
+        assert_eq!(Preset::from_index(39), Preset::GammaRayPulsar);
+    }
+
+    #[test]
+    fn next_prev_are_inverse_for_all_presets() {
+        for i in 0..20_u32 {
+            let preset = Preset::from_index(i);
+            assert_eq!(preset.next().prev(), preset);
+            assert_eq!(preset.prev().next(), preset);
+        }
+    }
+
+    #[test]
+    fn full_next_cycle_visits_all_presets_once() {
+        let mut seen = [false; 20];
+        let mut current = Preset::VectorSphere;
+
+        for _ in 0..20 {
+            let idx = current.index() as usize;
+            assert!(!seen[idx], "preset repeated before cycle completion at index {idx}");
+            seen[idx] = true;
+            current = current.next();
+        }
+
+        assert_eq!(current, Preset::VectorSphere);
+        assert!(seen.into_iter().all(|v| v));
     }
 }

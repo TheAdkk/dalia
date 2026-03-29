@@ -23,6 +23,9 @@ pub fn vertex(index: usize, preset: Preset, audio: &AudioState, time: f32) -> (f
         Preset::TesseractFold        => vertex_tesseract_fold(index, audio, time),
         Preset::HyperspaceJump       => vertex_hyperspace_jump(index, audio, time),
         Preset::WormholeBridge       => vertex_wormhole_bridge(index, audio, time),
+        Preset::SupernovaRemnant     => vertex_supernova_remnant(index, audio, time),
+        Preset::AndromedaSpiral      => vertex_andromeda_spiral(index, audio, time),
+        Preset::GammaRayPulsar       => vertex_gamma_ray_pulsar(index, audio, time),
     }
 }
 
@@ -180,26 +183,25 @@ fn vertex_nebula_vortex(index: usize, audio: &AudioState, time: f32) -> (f32, f3
 fn vertex_chaos_ribbon(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
     let f = index as f32;
     let n = NUM_VERTICES as f32;
-    let u = (f / n) * std::f32::consts::TAU * 10.0;
-    let stripe = ((index % 280) as f32 / 280.0) * std::f32::consts::TAU;
+    let t = (f / n) * std::f32::consts::TAU * 12.0;
+    let stripe = (index % 240) as f32 / 239.0 * 2.0 - 1.0;
 
-    let base = 2.0 + audio.bass * 2.9 + audio.sub_bass * 1.4;
-    let ripple = (u * 5.0 + time * 4.5).sin() * (0.7 + audio.upper_mid * 2.1);
-    let thickness = 0.32 + audio.treb * 1.8 + audio.air * 0.9;
+    let fold = (t * 0.5 + time * (0.4 + audio.mid * 1.1)).sin();
+    let radius = 3.0 + audio.bass * 2.2 + fold * 1.1;
+    let angle = t + fold * 0.35;
 
-    let angle = u + time * (0.5 + audio.mid * 0.6);
-    let mut x = angle.cos() * (base + ripple) + (stripe * 3.0).sin() * thickness;
-    let mut y = (u * 0.5 + time * 1.3).sin() * (1.9 + audio.mid * 2.2)
-        + (stripe + time * 2.4).cos() * thickness * 1.2;
-    let mut z = angle.sin() * (base + ripple) + (stripe * 2.0 + time * 3.3).sin() * thickness;
+    let mut x = angle.cos() * radius + stripe * (0.8 + audio.presence * 1.2);
+    let mut y = stripe * (2.2 + audio.mid * 1.7)
+        + (t * 0.7 - time * 1.6).sin() * (0.9 + audio.upper_mid * 1.4);
+    let mut z = angle.sin() * radius + stripe * (0.5 + audio.treb * 0.9);
 
-    let tear_gate = (u * 7.0 + time * 2.0).sin().abs();
-    let tear = (u * 13.0 + time * 8.0).sin().signum() * audio.presence * 1.1 * tear_gate;
-    let crackle = (u * 19.0 + time * 11.0).cos() * audio.treb * 0.5;
+    let tear_band = ((t * 3.4 + time * 4.8).sin() * 0.5 + 0.5).powf(2.0);
+    let tear = (stripe * 13.0 + time * 9.0).sin().signum() * tear_band * audio.treb * 1.4;
+    let shear = (t * 9.0 - time * 6.0 + stripe * 5.0).cos() * audio.air * 0.9;
 
-    x += tear + crackle;
-    y -= tear * 0.5;
-    z += tear * 0.8 - crackle * 0.4;
+    x += tear + shear;
+    y -= tear * 0.4 + shear * 0.25;
+    z += tear * 0.85 - shear * 0.5;
 
     (x, y, z)
 }
@@ -207,22 +209,29 @@ fn vertex_chaos_ribbon(index: usize, audio: &AudioState, time: f32) -> (f32, f32
 fn vertex_quantum_string(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
     let f = index as f32;
     let n = NUM_VERTICES as f32;
-    let u = (f / n) * std::f32::consts::TAU * 4.0;
-    
-    // Parametric laser string
-    let mut x = u.sin() * (4.0 + audio.treb * 2.5);
-    let mut y = u.cos() * (4.0 + audio.treb * 2.5);
-    let mut z = (f / n - 0.5) * 20.0;
-    
-    // Wave distortion
-    let wave1 = (z * 1.5 + time * 3.0).sin() * (1.0 + audio.mid * 2.0);
-    let wave2 = (z * 0.8 - time * 5.0).cos() * (0.5 + audio.upper_mid * 3.0);
-    let pulse = audio.bass * (time * 8.0).sin();
-    
-    x += wave1 + pulse;
-    y += wave2 - pulse;
-    
-    (x, y, z)
+    let ratio = f / n;
+    let z = (ratio - 0.5) * 28.0;
+    let strand = if index % 2 == 0 { 1.0 } else { -1.0 };
+
+    let base_radius = 1.2 + audio.treb * 1.8 + audio.presence * 0.6;
+    let twist = z * (0.42 + audio.mid * 0.5) + time * (1.8 + audio.energy * 2.6);
+
+    let mut x = twist.cos() * base_radius * strand;
+    let mut y = twist.sin() * base_radius * strand;
+
+    let knot = (z * 1.6 - time * (3.8 + audio.upper_mid * 2.4)).sin();
+    let node_gate = (knot * (2.2 + audio.presence)).sin().abs().powf(1.4);
+    let node_push = node_gate * (0.4 + audio.bass * 1.3);
+
+    x += twist.sin() * node_push;
+    y -= twist.cos() * node_push * 0.8;
+
+    let tremor = (z * 3.6 + time * 7.2 + f * 0.004).sin() * audio.air * 0.7;
+    x += tremor;
+    y -= tremor * 0.6;
+
+    let z_wobble = (z * 0.7 + time * 1.4).sin() * audio.sub_bass * 2.2;
+    (x, y, z + z_wobble)
 }
 
 fn vertex_galactic_web(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
@@ -235,9 +244,9 @@ fn vertex_galactic_web(index: usize, audio: &AudioState, time: f32) -> (f32, f32
 
     let base_radius = 5.0 + audio.energy * 6.0;
     
-    let mut x = fx * base_radius;
+    let x = fx * base_radius;
     let mut y = fy * base_radius * 0.4; // Flatter galaxy
-    let mut z = fz * base_radius;
+    let z = fz * base_radius;
     
     // Gravitational swirl
     let dist = (x*x + z*z).sqrt();
@@ -263,9 +272,9 @@ fn vertex_voxel_grid(index: usize, audio: &AudioState, time: f32) -> (f32, f32, 
     let step = 1.0;
     let offset = (side as f32) * step * 0.5;
     
-    let mut x = (x_idx as f32) * step - offset;
-    let mut y = (y_idx as f32) * step - offset;
-    let mut z = (z_idx as f32) * step - offset;
+    let x = (x_idx as f32) * step - offset;
+    let y = (y_idx as f32) * step - offset;
+    let z = (z_idx as f32) * step - offset;
     
     // Deform grid
     let dist = (x*x + y*y + z*z).sqrt();
@@ -288,56 +297,64 @@ fn vertex_morphing_cube(index: usize, audio: &AudioState, time: f32) -> (f32, f3
     let sx = theta.cos() * ry;
     let sz = theta.sin() * ry;
     
-    // Cube Target mapping (normalized)
-    let cx = sx.signum() * sx.abs().powf(0.1);
-    let cy = sy.signum() * sy.abs().powf(0.1);
-    let cz = sz.signum() * sz.abs().powf(0.1);
-    
-    // Easing parameter driven by low-end
-    let mix = audio.sub_bass * 1.5 + (time * 1.0).sin() * 0.5 + 0.5;
-    let clamped_mix = mix.clamp(0.0, 1.0);
-    
-    let x = sx * (1.0 - clamped_mix) + cx * clamped_mix;
-    let y = sy * (1.0 - clamped_mix) + cy * clamped_mix;
-    let z = sz * (1.0 - clamped_mix) + cz * clamped_mix;
-    
-    // Audio breath
-    let scale = 4.0 + audio.bass * 2.0 + audio.energy * 1.0;
-    
-    // Treble jaggedness
-    let jagged = audio.treb * 0.5 * (f * 99.9).sin();
-    
-    (x * scale + jagged, y * scale, z * scale + jagged)
+    // Cube target and quantized scaffold to create a mechanical fold identity.
+    let cx = sx.signum() * sx.abs().powf(0.07);
+    let cy = sy.signum() * sy.abs().powf(0.07);
+    let cz = sz.signum() * sz.abs().powf(0.07);
+
+    let quant = 0.38 + audio.mid * 0.52;
+    let qx = (cx / quant).round() * quant;
+    let qy = (cy / quant).round() * quant;
+    let qz = (cz / quant).round() * quant;
+
+    let morph_lfo = ((time * (0.55 + audio.sub_bass * 1.3)).sin() * 0.5 + 0.5).powf(1.35);
+    let edge_gate = ((sx.abs().max(sy.abs()).max(sz.abs()) - 0.55) / 0.45).clamp(0.0, 1.0);
+    let morph = (morph_lfo * 0.8 + edge_gate * 0.2).clamp(0.0, 1.0);
+
+    let x = sx * (1.0 - morph) + qx * morph;
+    let y = sy * (1.0 - morph) + qy * morph;
+    let z = sz * (1.0 - morph) + qz * morph;
+
+    let scaffold = (f * 0.017 + time * 2.1).sin().abs().powf(4.0) * audio.treb * 0.6;
+    let scale = 3.4 + audio.bass * 1.8 + audio.energy * 0.9;
+
+    (
+        (x + x.signum() * scaffold) * scale,
+        (y - y.signum() * scaffold * 0.5) * scale,
+        (z + z.signum() * scaffold) * scale,
+    )
 }
 
 fn vertex_heart_pulse(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
     let f = index as f32;
     let n = NUM_VERTICES as f32;
-    
-    // Julia/Taubin parametric mapping
-    let u = (f / n) * std::f32::consts::TAU * 40.0;
-    let v = (f / n) * std::f32::consts::PI;
 
-    // Heart geometry
-    let x_base = v.sin() * (15.0 * u.sin() - 4.0 * (3.0 * u).sin());
-    let y_base = 8.0 * v.cos();
-    let z_base = v.sin() * (15.0 * u.cos() - 5.0 * (2.0 * u).cos() - 2.0 * (3.0 * u).cos() - (4.0 * u).cos());
+    // Cardioid shell with layered thickness and asymmetric beat expansion.
+    let t = (f / n) * std::f32::consts::TAU;
+    let layer = (index % 180) as f32 / 180.0;
+    let lobe = 1.0 - 0.48 * layer;
 
-    // Scale dynamically
-    let scale = 0.45 + (audio.sub_bass * 0.4);
-    
-    let mut x = x_base * scale;
-    let mut y = z_base * scale; // Swap to stand up
-    let mut z = y_base * scale; 
+    let cardioid = 2.2 - 1.6 * t.sin();
+    let radial = cardioid * lobe;
+    let angle = t + time * 0.35;
 
-    // Diastolic/Systolic Pumping
-    let pump = 1.0 + audio.bass * 1.5 * (time * 12.0).sin().max(0.0);
-    x *= pump; y *= pump; z *= pump;
+    let mut x = radial * angle.cos();
+    let mut z = radial * angle.sin();
+    let mut y = (layer - 0.5) * (1.6 + cardioid * 0.9);
 
-    // Aortic noise
-    let noise = audio.treb * 0.5 * (f * 13.0).sin();
+    let beat_env = (time * (1.2 + audio.bass * 2.6)).sin().max(0.0).powf(1.8);
+    let pump = 1.0 + beat_env * (0.45 + audio.sub_bass * 0.85);
 
-    (x + noise, y + noise, z + noise)
+    x *= pump * 3.2;
+    y *= pump * 3.4;
+    z *= pump * 2.8;
+
+    let vessel = (t * 6.0 + time * 6.8).sin() * audio.presence * 0.35;
+    x += vessel;
+    y += vessel * 0.7;
+    z += (layer * 18.0 + time * 4.2).cos() * audio.treb * 0.28;
+
+    (x.clamp(-10.0, 10.0), y.clamp(-10.0, 10.0), z.clamp(-10.0, 10.0))
 }
 
 fn vertex_black_hole_singularity(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
@@ -348,9 +365,9 @@ fn vertex_black_hole_singularity(index: usize, audio: &AudioState, time: f32) ->
     let radius = 1.0 + (f / n).powf(0.8) * 35.0;
     let angle = f * 137.5 + time * (10.0 / radius); 
 
-    let mut x = angle.cos() * radius;
+    let x = angle.cos() * radius;
     let mut y = (f * 99.0).sin() * 0.4; // Disk thickness
-    let mut z = angle.sin() * radius;
+    let z = angle.sin() * radius;
 
     // Relativistic Lensing (Einstein Ring effect)
     let r_sq = x*x + y*y + z*z;
@@ -405,9 +422,9 @@ fn vertex_tesseract_fold(index: usize, audio: &AudioState, time: f32) -> (f32, f
     let distance = 3.5 + audio.sub_bass;
     let w_factor = distance / (distance - w4);
 
-    let mut x3 = x4 * w_factor;
-    let mut y3 = y4 * w_factor;
-    let mut z3 = z4 * w_factor;
+    let x3 = x4 * w_factor;
+    let y3 = y4 * w_factor;
+    let z3 = z4 * w_factor;
 
     // Universal Scaling
     let scale = 3.5 + audio.mid * 2.0;
@@ -450,7 +467,7 @@ fn vertex_wormhole_bridge(index: usize, audio: &AudioState, time: f32) -> (f32, 
     let r = 1.5 + u.cos() * 1.5 + audio.bass * 2.5;
     
     let mut x = r * v.cos();
-    let mut z = r * v.sin();
+    let z = r * v.sin();
     let y = u.sin() * 20.0; 
 
     // Space bend
@@ -463,4 +480,185 @@ fn vertex_wormhole_bridge(index: usize, audio: &AudioState, time: f32) -> (f32, 
     let nz = x * torsion_angle.sin() + z * torsion_angle.cos();
 
     (nx, y, nz)
+}
+
+fn vertex_supernova_remnant(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    let f = index as f32;
+    let n = NUM_VERTICES as f32;
+
+    // Core distribution (golden spiral sphere base)
+    let phi = std::f32::consts::PI * (3.0 - (5.0_f32).sqrt());
+    let y = 1.0 - (f / (n - 1.0)) * 2.0;
+    let ry = (1.0 - y * y).sqrt();
+    let theta = phi * f;
+
+    // Particle shell placement keeps a dense core with a controllable outer shockwave.
+    let shell_seed = (f * 137.5).fract();
+    let shell_t = shell_seed.powf(1.35);
+    let shell_bell = (shell_t * (2.0 - shell_t)).clamp(0.0, 1.0);
+
+    let core_radius = 1.2 + audio.bass * 1.6;
+    let shock_radius = 4.8 + audio.energy * 8.4 + audio.sub_bass * 6.0;
+    let mut radius = core_radius + (shock_radius - core_radius) * shell_t;
+
+    let ripple = (theta * 2.6 + time * (1.3 + audio.mid * 1.1)).sin() * (0.12 + audio.presence * 0.55);
+    let filament = (theta * 5.1 + y * 8.0 - time * (2.2 + audio.treb * 2.8)).cos() * (0.08 + audio.air * 0.45);
+    radius += (ripple + filament) * (0.25 + shell_bell * 0.9);
+
+    let mut x = theta.cos() * ry * radius;
+    let mut y_final = y * radius * (0.92 + shell_bell * 0.24);
+    let mut z = theta.sin() * ry * radius;
+
+    let swirl = (time * 0.9 + radius * 0.45 + y * 6.0).sin() * audio.upper_mid * (0.2 + shell_bell) * 1.15;
+    let shear = (theta * 3.4 + time * 1.6).cos() * audio.treb * (0.12 + shell_bell * 0.7);
+
+    x += swirl - shear * 0.35;
+    y_final += shear * 0.55;
+    z += swirl * 0.72 + shear * 0.42;
+
+    (
+        x.clamp(-24.0, 24.0),
+        y_final.clamp(-18.0, 18.0),
+        z.clamp(-24.0, 24.0),
+    )
+}
+
+fn vertex_andromeda_spiral(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    let f = index as f32;
+    let n = NUM_VERTICES as f32;
+
+    let num_arms = 4.0;
+    let arm_idx = (index % num_arms as usize) as f32;
+    let arm_phase = arm_idx * (std::f32::consts::TAU / num_arms);
+
+    let dist_t = (f / n).powf(1.3);
+    let theta = dist_t * std::f32::consts::TAU * (2.5 + audio.mid * 1.2);
+
+    let r_base = 0.55 * (0.13 * theta).exp();
+    let density_wave = (theta * 2.1 - time * (1.2 + audio.presence * 1.4)).sin();
+    let arm_mod = 1.0 + density_wave * (0.06 + audio.presence * 0.22);
+    let radius = (r_base * (0.95 + audio.mid * 1.35) * arm_mod + audio.bass * 0.95).clamp(0.15, 18.0);
+
+    let diff_rot = time * (0.45 + audio.energy * 0.35) / (1.0 + radius * 0.22);
+    let arm_twist = density_wave * (0.08 + audio.upper_mid * 0.18);
+    let total_angle = theta + arm_phase + diff_rot + arm_twist;
+
+    let mut x = total_angle.cos() * radius;
+    let mut z = total_angle.sin() * radius;
+
+    let jitter = ((f * 12.9898).sin() * 43_758.547).fract() * 2.0 - 1.0;
+    let thickness = 0.14 + 0.92 / (1.0 + radius * 0.7);
+    let bulge = (1.0 - radius / 7.5).max(0.0);
+    let mut y = jitter * thickness * (1.3 + audio.sub_bass * 1.8);
+    y += bulge * (audio.bass * 1.6) * (time * 1.7 + f * 0.002).sin();
+
+    let warp = (time * 0.8 + theta * 1.3).sin() * audio.air * 0.6;
+    x += warp * z.signum() * 0.3;
+    z -= warp * x.signum() * 0.3;
+
+    (x.clamp(-20.0, 20.0), y.clamp(-8.0, 8.0), z.clamp(-20.0, 20.0))
+}
+
+fn vertex_gamma_ray_pulsar(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    let f = index as f32;
+    let n = NUM_VERTICES as f32;
+    let ratio = f / n;
+
+    // Dense rotating core (oblate spheroid).
+    if ratio < 0.36 {
+        let core_f = f;
+        let core_n = n * 0.36;
+        let phi = std::f32::consts::PI * (3.0 - (5.0_f32).sqrt());
+        let y_norm = 1.0 - (core_f / (core_n - 1.0)) * 2.0;
+        let ry = (1.0 - y_norm * y_norm).sqrt();
+        let spin = time * (6.0 + audio.energy * 8.0) + core_f * 0.004;
+        let theta = phi * core_f + spin;
+
+        let core_radius = 1.8 + audio.bass * 1.6 + audio.sub_bass * 0.9;
+        let oblate = 0.55 + audio.mid * 0.18;
+        let precession = (time * 1.4).sin() * (0.12 + audio.presence * 0.22);
+
+        let mut x = (theta + precession).cos() * ry * core_radius;
+        let mut z = (theta + precession).sin() * ry * core_radius;
+        let mut y = y_norm * core_radius * oblate;
+
+        let pump = 1.0 + audio.bass * 0.85 + (time * 7.0).sin() * audio.sub_bass * 0.22;
+        x *= pump;
+        y *= pump;
+        z *= pump;
+
+        return (x.clamp(-8.0, 8.0), y.clamp(-5.0, 5.0), z.clamp(-8.0, 8.0));
+    }
+
+    // Polar gamma jets with controlled helical motion.
+    let is_top_jet = (index % 2) == 0;
+    let jet_t = ((ratio - 0.36) / 0.64).powf(1.45);
+
+    let mut y = 1.2 + jet_t * 28.0;
+    if !is_top_jet {
+        y = -y;
+    }
+
+    let helical_speed = 2.1 + audio.presence * 4.6;
+    let helical_phase = time * helical_speed + jet_t * 18.0 + f * 0.02;
+    let base_radius = 0.12 + jet_t * (0.35 + audio.energy * 0.7);
+    let pulse_envelope =
+        0.82 + (time * (5.0 + audio.bass * 4.0) + jet_t * 10.0).sin().abs() * (0.18 + audio.sub_bass * 0.3);
+    let radius = base_radius * pulse_envelope;
+
+    let mut x = helical_phase.cos() * radius;
+    let mut z = helical_phase.sin() * radius;
+
+    let burst = (time * 18.0 + f * 0.03).sin() * audio.treb * (0.18 + jet_t * 0.7);
+    x += burst * helical_phase.cos();
+    z += burst * helical_phase.sin();
+
+    let jet_wave = (time * 8.5 + jet_t * 14.0 + f * 0.006).sin() * audio.presence * (0.35 + jet_t * 1.7);
+    y += jet_wave;
+
+    (x.clamp(-9.0, 9.0), y.clamp(-32.0, 32.0), z.clamp(-9.0, 9.0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{vertex, NUM_VERTICES};
+    use crate::audio::AudioState;
+    use crate::presets::Preset;
+
+    fn sample_audio_state() -> AudioState {
+        AudioState {
+            sub_bass: 0.52,
+            bass: 0.61,
+            low_mid: 0.33,
+            mid: 0.47,
+            upper_mid: 0.38,
+            presence: 0.29,
+            treb: 0.42,
+            air: 0.2,
+            energy: 0.58,
+            chroma: [0.0; 12],
+        }
+    }
+
+    #[test]
+    fn vertex_outputs_are_finite_for_all_presets() {
+        let audio = sample_audio_state();
+        let sample_indices = [0, NUM_VERTICES / 11, NUM_VERTICES / 3, NUM_VERTICES / 2, NUM_VERTICES - 1];
+        let sample_times = [0.0_f32, 0.8, 2.6, 7.9];
+
+        for preset_idx in 0..20_u32 {
+            let preset = Preset::from_index(preset_idx);
+
+            for &index in &sample_indices {
+                for &time in &sample_times {
+                    let (x, y, z) = vertex(index, preset, &audio, time);
+
+                    assert!(x.is_finite() && y.is_finite() && z.is_finite());
+                    assert!(x.abs() <= 160.0, "x out of expected bounds for preset {:?}", preset);
+                    assert!(y.abs() <= 160.0, "y out of expected bounds for preset {:?}", preset);
+                    assert!(z.abs() <= 160.0, "z out of expected bounds for preset {:?}", preset);
+                }
+            }
+        }
+    }
 }

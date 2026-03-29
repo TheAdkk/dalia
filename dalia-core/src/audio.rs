@@ -92,3 +92,68 @@ impl AudioState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::AudioState;
+
+    fn assert_band_ranges(state: &AudioState) {
+        let bands = [
+            state.sub_bass,
+            state.bass,
+            state.low_mid,
+            state.mid,
+            state.upper_mid,
+            state.presence,
+            state.treb,
+            state.air,
+            state.energy,
+        ];
+
+        for value in bands {
+            assert!(value.is_finite());
+            assert!((0.0..=1.0).contains(&value));
+        }
+
+        for value in state.chroma {
+            assert!(value.is_finite());
+            assert!((0.0..=1.0).contains(&value));
+        }
+    }
+
+    #[test]
+    fn empty_audio_input_keeps_default_state() {
+        let mut state = AudioState::new();
+        let mut processed = Vec::new();
+
+        state.process_audio(&[], &mut processed, 43.0);
+
+        assert!(processed.is_empty());
+        assert_eq!(state.energy, 0.0);
+        assert!(state.chroma.iter().all(|v| *v == 0.0));
+        assert_band_ranges(&state);
+    }
+
+    #[test]
+    fn process_audio_outputs_finite_and_bounded_values() {
+        let mut state = AudioState::new();
+        let mut processed = Vec::new();
+
+        let frequency_data: Vec<u8> = (0..1024)
+            .map(|i| ((i * 37 + 11) % 255) as u8)
+            .collect();
+
+        state.process_audio(&frequency_data, &mut processed, 43.0);
+
+        assert_eq!(processed.len(), frequency_data.len());
+        assert!(processed.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)));
+        assert_band_ranges(&state);
+
+        let chroma_sum: f32 = state.chroma.iter().sum();
+        assert!(chroma_sum <= 1.0 + 1e-6);
+
+        let silence = vec![0_u8; 1024];
+        state.process_audio(&silence, &mut processed, 43.0);
+        assert_band_ranges(&state);
+    }
+}
