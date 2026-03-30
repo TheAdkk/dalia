@@ -1,4 +1,13 @@
-import { PLAY_ICON, PAUSE_ICON, NEXT_ICON, PREV_ICON, MASHUP_ICON } from './icons';
+import { PLAY_ICON, PAUSE_ICON, NEXT_ICON, PREV_ICON, GEAR_ICON } from './icons';
+
+type SettingsMenuOptions = {
+  presetNames: readonly string[];
+  mashupEnabled: boolean;
+  fpsEnabled: boolean;
+  onToggleMashup: (enabled: boolean) => void;
+  onApplyPreset: (presetIdx: number) => void;
+  onToggleFps: (enabled: boolean) => void;
+};
 
 export class UIManager {
   public canvas = document.getElementById('visualizer') as HTMLCanvasElement;
@@ -15,7 +24,37 @@ export class UIManager {
 
   private customTrackUrl: string | null = null;
   private presetFlashTimeout: number | null = null;
-  public mashupBtnRef: HTMLButtonElement | null = null;
+  public settingsBtnRef: HTMLButtonElement | null = null;
+  public mashupToggleRef: HTMLInputElement | null = null;
+  public presetSelectRef: HTMLSelectElement | null = null;
+  public fpsToggleRef: HTMLInputElement | null = null;
+  public fpsOverlayRef: HTMLDivElement | null = null;
+  private fpsEnabled = false;
+  private fpsLastPaintAt = 0;
+
+  private resetTimelineUi() {
+    this.progressBar.value = '0';
+    this.timeCurrent.textContent = '0:00';
+    this.timeTotal.textContent = '0:00';
+  }
+
+  private ensureFpsOverlay(): HTMLDivElement {
+    if (this.fpsOverlayRef) return this.fpsOverlayRef;
+
+    const existing = document.getElementById('fps-overlay');
+    if (existing instanceof HTMLDivElement) {
+      this.fpsOverlayRef = existing;
+      return existing;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'fps-overlay';
+    overlay.className = 'fps-overlay';
+    overlay.textContent = 'FPS --';
+    document.body.appendChild(overlay);
+    this.fpsOverlayRef = overlay;
+    return overlay;
+  }
 
   public formatTime(seconds: number): string {
     if (isNaN(seconds)) return '0:00';
@@ -32,8 +71,10 @@ export class UIManager {
     }, 680);
   }
 
-  public syncPresetIndicator(baseName: string, mashupEnabled: boolean) {
-    const mashupTag = mashupEnabled ? ' · AUTO 15s' : '';
+  public syncPresetIndicator(baseName: string, mashupEnabled: boolean, dynamicMode = false) {
+    const mashupTag = mashupEnabled
+      ? (dynamicMode ? ' · AUTO DYN' : ' · AUTO 15s')
+      : '';
     this.presetIndicator.textContent = `Preset: ${baseName}${mashupTag}`;
     this.flashPresetIndicator();
   }
@@ -45,13 +86,48 @@ export class UIManager {
   }
 
   public updateMashupIcon(mashupEnabled: boolean) {
-    if (this.mashupBtnRef) {
-      this.mashupBtnRef.classList.toggle('active', mashupEnabled);
-      this.mashupBtnRef.title = mashupEnabled ? 'Mashup Auto (ON)' : 'Mashup Auto (OFF)';
+    if (this.settingsBtnRef) {
+      this.settingsBtnRef.classList.toggle('active', mashupEnabled);
+      this.settingsBtnRef.title = mashupEnabled ? 'Settings - Mashup ON' : 'Settings';
+    }
+    if (this.mashupToggleRef && this.mashupToggleRef.checked !== mashupEnabled) {
+      this.mashupToggleRef.checked = mashupEnabled;
     }
   }
 
+  public syncPresetSelection(presetIdx: number) {
+    if (!this.presetSelectRef) return;
+    this.presetSelectRef.value = String(presetIdx);
+  }
+
+  public setFpsEnabled(enabled: boolean) {
+    this.fpsEnabled = enabled;
+    if (this.fpsToggleRef && this.fpsToggleRef.checked !== enabled) {
+      this.fpsToggleRef.checked = enabled;
+    }
+
+    const overlay = this.ensureFpsOverlay();
+    overlay.classList.toggle('visible', enabled);
+    if (!enabled) {
+      overlay.textContent = 'FPS --';
+      this.fpsLastPaintAt = 0;
+    }
+  }
+
+  public updateFps(fps: number) {
+    if (!this.fpsEnabled) return;
+
+    const now = performance.now();
+    if (now - this.fpsLastPaintAt < 160) return;
+    this.fpsLastPaintAt = now;
+
+    const overlay = this.ensureFpsOverlay();
+    overlay.textContent = `FPS ${fps.toFixed(1)}`;
+  }
+
   public initPlayer(onPlay: () => void) {
+    this.resetTimelineUi();
+
     this.audioEl.addEventListener('timeupdate', () => {
       const current  = this.audioEl.currentTime;
       const duration = this.audioEl.duration;
@@ -59,6 +135,39 @@ export class UIManager {
         this.progressBar.value = ((current / duration) * 100).toString();
         this.timeCurrent.textContent = this.formatTime(current);
         this.timeTotal.textContent   = this.formatTime(duration);
+      }
+    });
+
+    this.audioEl.addEventListener('loadedmetadata', () => {
+      this.resetTimelineUi();
+      const duration = this.audioEl.duration;
+      if (!isNaN(duration)) {
+        this.timeTotal.textContent = this.formatTime(duration);
+      }
+    });
+
+    this.audioEl.addEventListener('durationchange', () => {
+      const duration = this.audioEl.duration;
+      if (!isNaN(duration)) {
+        this.timeTotal.textContent = this.formatTime(duration);
+      }
+    });
+
+    this.audioEl.addEventListener('play', () => {
+      this.playPauseBtn.innerHTML = PAUSE_ICON;
+      document.getElementById('floating-player')?.classList.remove('fade-out');
+    });
+
+    this.audioEl.addEventListener('pause', () => {
+      this.playPauseBtn.innerHTML = PLAY_ICON;
+    });
+
+    this.audioEl.addEventListener('ended', () => {
+      this.playPauseBtn.innerHTML = PLAY_ICON;
+      this.progressBar.value = '100';
+      const duration = this.audioEl.duration;
+      if (!isNaN(duration)) {
+        this.timeCurrent.textContent = this.formatTime(duration);
       }
     });
 
@@ -72,13 +181,9 @@ export class UIManager {
     this.playPauseBtn.addEventListener('click', () => {
       if (this.audioEl.paused) {
         onPlay();
-        this.audioEl.play().then(() => {
-          this.playPauseBtn.innerHTML = PAUSE_ICON;
-          document.getElementById('floating-player')?.classList.remove('fade-out');
-        });
+        void this.audioEl.play().catch(() => undefined);
       } else {
         this.audioEl.pause();
-        this.playPauseBtn.innerHTML = PLAY_ICON;
       }
     });
 
@@ -114,9 +219,12 @@ export class UIManager {
       this.customTrackUrl = URL.createObjectURL(nextFile);
 
       const shouldResumePlayback = !this.audioEl.paused;
+      this.audioEl.pause();
       this.audioEl.src = this.customTrackUrl;
       this.audioEl.load();
       this.audioEl.currentTime = 0;
+      this.resetTimelineUi();
+      this.playPauseBtn.innerHTML = PLAY_ICON;
       this.setTrackIndicator(nextFile.name, true);
 
       if (shouldResumePlayback) {
@@ -128,9 +236,9 @@ export class UIManager {
   }
 
   public insertPresetControls(
-    onPrev: () => void, 
-    onNext: () => void, 
-    onToggleMashup: () => void
+    onPrev: () => void,
+    onNext: () => void,
+    options: SettingsMenuOptions
   ) {
     const player = document.getElementById('floating-player')!;
 
@@ -148,23 +256,156 @@ export class UIManager {
     nextBtn.innerHTML = NEXT_ICON;
     nextBtn.addEventListener('click', onNext);
 
-    const mashupBtn = document.createElement('button');
-    mashupBtn.id        = 'mashup-btn';
-    mashupBtn.className = 'control-btn mashup';
-    mashupBtn.innerHTML = MASHUP_ICON;
-    mashupBtn.title     = 'Mashup Auto (OFF)';
-    mashupBtn.addEventListener('click', onToggleMashup);
-    this.mashupBtnRef = mashupBtn;
+    const settingsWrap = document.createElement('div');
+    settingsWrap.className = 'settings-wrap';
+
+    const settingsBtn = document.createElement('button');
+    settingsBtn.id = 'settings-btn';
+    settingsBtn.className = 'control-btn settings';
+    settingsBtn.innerHTML = GEAR_ICON;
+    settingsBtn.title = 'Settings';
+    settingsBtn.type = 'button';
+    settingsBtn.setAttribute('aria-haspopup', 'true');
+    settingsBtn.setAttribute('aria-expanded', 'false');
+    this.settingsBtnRef = settingsBtn;
+
+    const panel = document.createElement('div');
+    panel.className = 'settings-panel';
+    panel.hidden = true;
+    panel.style.left = '8px';
+    panel.style.top = '8px';
+    document.body.appendChild(panel);
+
+    const title = document.createElement('div');
+    title.className = 'settings-title';
+    title.textContent = 'Visual Settings';
+
+    const mashupRow = document.createElement('label');
+    mashupRow.className = 'settings-row';
+    const mashupText = document.createElement('span');
+    mashupText.textContent = 'Mashup mode';
+    const mashupToggle = document.createElement('input');
+    mashupToggle.type = 'checkbox';
+    mashupToggle.checked = options.mashupEnabled;
+    mashupToggle.addEventListener('change', () => {
+      options.onToggleMashup(mashupToggle.checked);
+    });
+    mashupRow.append(mashupText, mashupToggle);
+    this.mashupToggleRef = mashupToggle;
+
+    const presetRow = document.createElement('label');
+    presetRow.className = 'settings-stack';
+    const presetText = document.createElement('span');
+    presetText.className = 'settings-caption';
+    presetText.textContent = 'Preset to test';
+    const presetSelect = document.createElement('select');
+    presetSelect.className = 'settings-select';
+    options.presetNames.forEach((name, idx) => {
+      const option = document.createElement('option');
+      option.value = String(idx);
+      option.textContent = `${idx + 1}. ${name}`;
+      presetSelect.appendChild(option);
+    });
+    presetRow.append(presetText, presetSelect);
+    this.presetSelectRef = presetSelect;
+
+    const applyPresetBtn = document.createElement('button');
+    applyPresetBtn.type = 'button';
+    applyPresetBtn.className = 'settings-apply-btn';
+    applyPresetBtn.textContent = 'Apply preset';
+    applyPresetBtn.addEventListener('click', () => {
+      const presetIdx = Number.parseInt(presetSelect.value, 10);
+      if (Number.isFinite(presetIdx)) {
+        options.onApplyPreset(presetIdx);
+      }
+      closePanel();
+    });
+
+    const fpsRow = document.createElement('label');
+    fpsRow.className = 'settings-row';
+    const fpsText = document.createElement('span');
+    fpsText.textContent = 'Show FPS';
+    const fpsToggle = document.createElement('input');
+    fpsToggle.type = 'checkbox';
+    fpsToggle.checked = options.fpsEnabled;
+    fpsToggle.addEventListener('change', () => {
+      options.onToggleFps(fpsToggle.checked);
+      this.setFpsEnabled(fpsToggle.checked);
+    });
+    fpsRow.append(fpsText, fpsToggle);
+    this.fpsToggleRef = fpsToggle;
+
+    const repositionPanel = () => {
+      if (panel.hidden) return;
+
+      const buttonRect = settingsBtn.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+
+      let left = buttonRect.right - panelRect.width;
+      let top = buttonRect.top - panelRect.height - 12;
+
+      left = Math.max(8, Math.min(left, window.innerWidth - panelRect.width - 8));
+      top = Math.max(8, Math.min(top, window.innerHeight - panelRect.height - 8));
+
+      panel.style.left = `${left}px`;
+      panel.style.top = `${top}px`;
+    };
+
+    panel.append(title, mashupRow, presetRow, applyPresetBtn, fpsRow);
+
+    const closePanel = () => {
+      panel.hidden = true;
+      settingsBtn.classList.remove('menu-open');
+      settingsBtn.setAttribute('aria-expanded', 'false');
+    };
+
+    settingsBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const willOpen = panel.hidden;
+      panel.hidden = !willOpen;
+      settingsBtn.classList.toggle('menu-open', willOpen);
+      settingsBtn.setAttribute('aria-expanded', String(willOpen));
+      if (willOpen) {
+        repositionPanel();
+      }
+    });
+
+    window.addEventListener('resize', repositionPanel);
+    window.addEventListener('scroll', repositionPanel, true);
+
+    document.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!settingsWrap.contains(target) && !panel.contains(target)) {
+        closePanel();
+      }
+    });
+
+    settingsWrap.append(settingsBtn);
 
     const progressWrapper = player.querySelector('.progress-wrapper')!;
     player.insertBefore(prevBtn, progressWrapper);
     player.insertBefore(nextBtn, progressWrapper.nextSibling);
-    player.appendChild(mashupBtn);
+    player.appendChild(settingsWrap);
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closePanel();
+      }
+
+      const target = e.target;
+      const editingField =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLSelectElement ||
+        target instanceof HTMLTextAreaElement;
+      if (editingField) return;
+
       if (e.key === 'ArrowRight') onNext();
-      if (e.key === 'ArrowLeft')  onPrev();
+      if (e.key === 'ArrowLeft') onPrev();
     });
+
+    this.updateMashupIcon(options.mashupEnabled);
+    this.setFpsEnabled(options.fpsEnabled);
   }
 }

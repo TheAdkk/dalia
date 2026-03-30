@@ -9,6 +9,15 @@ import { AudioManager } from './audio/AudioManager';
 import { UIManager } from './ui/UIManager';
 import { RecordingManager } from './ui/RecordingManager';
 import { setupWebGL, type SceneContext } from './render/SceneSetup';
+import {
+  clamp01 as clampDynamics,
+  computeAdaptiveHysteresis,
+  computeAberrationAmount,
+  computeDynamicCooldownMs,
+  computeDynamicMashupScore,
+  computeDropLikelihood,
+  isBeatAligned,
+} from './visual/rhythmDynamics';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const liveColor = new THREE.Color('#AA55FF');
@@ -58,14 +67,103 @@ let dynamicRangeVisual = 0;
 let plrVisual = 0;
 
 let masterHueBase = Math.random();
+let harmonicConfidenceSmooth = 0;
+let bpmSmooth = 120;
+let bpmConfidenceSmooth = 0;
+let predictedEnergyLead = 0;
+let beatPulseSmooth = 0;
 
 // ─── Mashup State ─────────────────────────────────────────────────────────────
 let mashupEnabled = false;
 let mashupIntervalId: number | null = null;
 let lastAutoPresetAtMs = 0;
+let mashupDynamicArmed = true;
+let dropSyncPending = false;
+let dropSyncWindowUntilMs = 0;
+let dropSyncLastArmAtMs = 0;
+let showFps = false;
+let fpsSmoothed = 60;
+let lastFrameAtMs = performance.now();
+let presetTransitionEndsAtMs = 0;
+
+const UI_STATE_STORAGE_KEY = 'dalia.ui.settings.v1';
+
+type PersistedUiState = {
+  mashupEnabled: boolean;
+  showFps: boolean;
+  presetIndex: number;
+};
+
+let suppressStatePersist = false;
+
+const ROBUST_WINDOW_FRAMES = CONFIG.ROBUST_NORMALIZATION_WINDOW_FRAMES;
+const VOLATILITY_WINDOW_FRAMES = CONFIG.MASHUP_DYNAMIC_VOLATILITY_WINDOW_FRAMES;
+
+const transientHistory: number[] = [];
+const fluxHistory: number[] = [];
+const energyHistory: number[] = [];
+const lowBandHistory: number[] = [];
+const dynamicScoreHistory: number[] = [];
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
+}
+
+function clampSigned(v: number): number {
+  return Math.max(-1, Math.min(1, v));
+}
+
+function pushRolling(history: number[], value: number, maxSize: number): void {
+  history.push(value);
+  if (history.length > maxSize) {
+    history.splice(0, history.length - maxSize);
+  }
+}
+
+function medianOf(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[mid - 1] + sorted[mid]) * 0.5;
+  }
+  return sorted[mid];
+}
+
+function madOf(values: number[], median: number): number {
+  if (values.length === 0) return 0;
+  const deviations = values.map((v) => Math.abs(v - median));
+  return medianOf(deviations);
+}
+
+function robustNormalize(history: number[], value: number, maxSize: number): number {
+  pushRolling(history, value, maxSize);
+  if (history.length < 12) {
+    return clamp01(value);
+  }
+
+  const median = medianOf(history);
+  const mad = madOf(history, median);
+  const z = (value - median) / (1.4826 * mad + 0.001);
+
+  return clamp01((z + 1.5) / 3.5);
+}
+
+function computeVolatility(history: number[]): number {
+  if (history.length < 8) return 0;
+  const mean = history.reduce((sum, v) => sum + v, 0) / history.length;
+  const variance = history.reduce((sum, v) => {
+    const d = v - mean;
+    return sum + d * d;
+  }, 0) / history.length;
+  return Math.sqrt(variance);
+}
+
+function computeSpectralStability(history: number[]): number {
+  if (history.length < 10) return 0.5;
+  const median = medianOf(history);
+  const mad = madOf(history, median);
+  return clamp01(1 - mad / 0.15);
 }
 
 function averageBand(
@@ -88,8 +186,74 @@ function averageBand(
   return sum / (to - from);
 }
 
+function readPersistedUiState(): PersistedUiState | null {
+  try {
+    const raw = localStorage.getItem(UI_STATE_STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<PersistedUiState>;
+    if (
+      typeof parsed.mashupEnabled !== 'boolean' ||
+      typeof parsed.showFps !== 'boolean' ||
+      typeof parsed.presetIndex !== 'number'
+    ) {
+      return null;
+    }
+
+    return {
+      mashupEnabled: parsed.mashupEnabled,
+      showFps: parsed.showFps,
+      presetIndex: parsed.presetIndex,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function clearPersistedUiState() {
+  try {
+    localStorage.removeItem(UI_STATE_STORAGE_KEY);
+  } catch {
+    // no-op if storage is unavailable
+  }
+}
+
+function persistUiState() {
+  if (suppressStatePersist || !engine) return;
+
+  try {
+    const state: PersistedUiState = {
+      mashupEnabled,
+      showFps,
+      presetIndex: engine.current_preset_index(),
+    };
+    localStorage.setItem(UI_STATE_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // no-op if storage is unavailable
+  }
+}
+
+function applyPersistedUiState() {
+  const persisted = readPersistedUiState();
+  if (!persisted) return false;
+
+  suppressStatePersist = true;
+  setPresetByIndex(persisted.presetIndex);
+  setMashupMode(persisted.mashupEnabled);
+  setFpsMode(persisted.showFps);
+  suppressStatePersist = false;
+  persistUiState();
+
+  return true;
+}
+
+function markPresetTransition(nowMs: number) {
+  presetTransitionEndsAtMs = nowMs + CONFIG.MASHUP_TRANSITION_TARGET_MS;
+}
+
 // ─── Preset Navigation ───────────────────────────────────────────────────────
 function goNextPreset() {
+  markPresetTransition(performance.now());
   engine.next_preset();
   leftEngine.next_preset();
   rightEngine.next_preset();
@@ -98,6 +262,7 @@ function goNextPreset() {
 }
 
 function goPrevPreset() {
+  markPresetTransition(performance.now());
   engine.prev_preset();
   leftEngine.prev_preset();
   rightEngine.prev_preset();
@@ -106,6 +271,7 @@ function goPrevPreset() {
 }
 
 function goRandomPreset() {
+  markPresetTransition(performance.now());
   const numPresets = CONFIG.PRESET_NAMES.length;
   let target = engine.current_preset_index();
   if (numPresets > 1) {
@@ -120,8 +286,29 @@ function goRandomPreset() {
   resetMashupTimer();
 }
 
+function setPresetByIndex(targetIdx: number) {
+  const total = CONFIG.PRESET_NAMES.length;
+  if (total <= 0) return;
+
+  const safeIdx = Math.max(0, Math.min(total - 1, Math.floor(targetIdx)));
+  markPresetTransition(performance.now());
+  engine.random_preset(safeIdx);
+  leftEngine.random_preset(safeIdx);
+  rightEngine.random_preset(safeIdx);
+  syncPresetUI();
+  resetMashupTimer();
+}
+
+function setFpsMode(enabled: boolean) {
+  showFps = enabled;
+  ui.setFpsEnabled(enabled);
+  persistUiState();
+}
+
 function setMashupMode(enabled: boolean) {
   mashupEnabled = enabled;
+  mashupDynamicArmed = true;
+  dropSyncPending = false;
   ui.updateMashupIcon(mashupEnabled);
   resetMashupTimer();
   syncPresetUI();
@@ -129,15 +316,24 @@ function setMashupMode(enabled: boolean) {
 
 function resetMashupTimer() {
   if (mashupIntervalId !== null) window.clearInterval(mashupIntervalId);
-  if (mashupEnabled) {
+  if (mashupEnabled && !CONFIG.MASHUP_DYNAMIC_MODE) {
     mashupIntervalId = window.setInterval(goRandomPreset, CONFIG.MASHUP_INTERVAL_MS);
+  } else {
+    mashupIntervalId = null;
   }
 }
 
 function syncPresetUI() {
   const idx = engine.current_preset_index();
   const baseName = CONFIG.PRESET_NAMES[idx] ?? CONFIG.PRESET_NAMES[0];
-  ui.syncPresetIndicator(baseName, mashupEnabled);
+  ui.syncPresetSelection(idx);
+  const dynamicAutoBadge = mashupEnabled || (
+    CONFIG.MASHUP_DYNAMIC_MODE &&
+    CONFIG.AUTO_PRESET_MUTATION &&
+    CONFIG.MASHUP_DYNAMIC_AUTO_WITHOUT_TOGGLE
+  );
+  ui.syncPresetIndicator(baseName, dynamicAutoBadge, CONFIG.MASHUP_DYNAMIC_MODE);
+  persistUiState();
 }
 
 function maybeMutatePreset(dynamicScore: number, transientScore: number, nowMs: number) {
@@ -153,9 +349,129 @@ function maybeMutatePreset(dynamicScore: number, transientScore: number, nowMs: 
   lastAutoPresetAtMs = nowMs;
 }
 
+function maybeMashupDynamic(
+  score: number,
+  nowMs: number,
+  pulse: number,
+  dynamicScore: number,
+  beatPhase: number,
+  bpmConfidence: number,
+  scoreVolatility: number,
+  dropLikelihood: number,
+) {
+  const dynamicAutoEnabled = mashupEnabled || (CONFIG.AUTO_PRESET_MUTATION && CONFIG.MASHUP_DYNAMIC_AUTO_WITHOUT_TOGGLE);
+  if (!CONFIG.MASHUP_DYNAMIC_MODE || !dynamicAutoEnabled) return;
+
+  if (lastAutoPresetAtMs <= 0) {
+    lastAutoPresetAtMs = nowMs;
+  }
+
+  const high = CONFIG.MASHUP_DYNAMIC_SCORE_THRESHOLD;
+  const adaptiveHysteresis = computeAdaptiveHysteresis(
+    CONFIG.MASHUP_DYNAMIC_HYSTERESIS,
+    scoreVolatility,
+  );
+  const low = Math.max(0.2, high - adaptiveHysteresis);
+
+  if (CONFIG.MASHUP_DROP_SYNC_MODE) {
+    const canArmDrop =
+      !dropSyncPending &&
+      nowMs - dropSyncLastArmAtMs >= CONFIG.MASHUP_DROP_SYNC_REARM_MS &&
+      score >= CONFIG.MASHUP_DROP_SYNC_MIN_SCORE &&
+      dropLikelihood >= CONFIG.MASHUP_DROP_SYNC_MIN_LIKELIHOOD;
+
+    if (canArmDrop) {
+      dropSyncPending = true;
+      dropSyncWindowUntilMs = nowMs + CONFIG.MASHUP_TRANSITION_TARGET_MS;
+      dropSyncLastArmAtMs = nowMs;
+    }
+
+    if (dropSyncPending) {
+      const windowExpired = nowMs >= dropSyncWindowUntilMs;
+      const beatReady =
+        !CONFIG.MASHUP_DYNAMIC_BEAT_LOCK ||
+        bpmConfidence < 0.18 ||
+        isBeatAligned(beatPhase, bpmConfidence, pulse);
+      const minDropCooldown = Math.max(900, CONFIG.MASHUP_DYNAMIC_BASE_COOLDOWN_MS * 0.45);
+
+      if ((beatReady || windowExpired) && nowMs - lastAutoPresetAtMs >= minDropCooldown) {
+        goRandomPreset();
+        lastAutoPresetAtMs = nowMs;
+        mashupDynamicArmed = false;
+        dropSyncPending = false;
+        return;
+      }
+
+      if (score < low * 0.92) {
+        dropSyncPending = false;
+      }
+    }
+  }
+
+  const sinceLast = nowMs - lastAutoPresetAtMs;
+  const idleForce = sinceLast >= CONFIG.MASHUP_DYNAMIC_IDLE_FORCE_MS;
+  if (idleForce) {
+    const hardForce = sinceLast >= CONFIG.MASHUP_DYNAMIC_IDLE_FORCE_MS * 1.8;
+    const relaxedTrigger =
+      score >= CONFIG.MASHUP_DYNAMIC_IDLE_MIN_SCORE ||
+      pulse >= CONFIG.MASHUP_DYNAMIC_IDLE_MIN_PULSE;
+
+    const relaxedBeatLock =
+      !CONFIG.MASHUP_DYNAMIC_BEAT_LOCK ||
+      bpmConfidence < 0.18 ||
+      isBeatAligned(beatPhase, bpmConfidence, pulse);
+
+    if ((relaxedTrigger && relaxedBeatLock) || hardForce) {
+      goRandomPreset();
+      lastAutoPresetAtMs = nowMs;
+      mashupDynamicArmed = false;
+      dropSyncPending = false;
+      return;
+    }
+  }
+
+  if (score < low) {
+    mashupDynamicArmed = true;
+    dropSyncPending = false;
+    return;
+  }
+
+  if (!mashupDynamicArmed || score < high) return;
+
+  const cooldownMs = computeDynamicCooldownMs(
+    CONFIG.MASHUP_DYNAMIC_BASE_COOLDOWN_MS,
+    CONFIG.MASHUP_DYNAMIC_MAX_COOLDOWN_MS,
+    dynamicScore,
+    bpmConfidence,
+    scoreVolatility,
+  );
+
+  if (nowMs - lastAutoPresetAtMs < cooldownMs) return;
+
+  const beatLocked = !CONFIG.MASHUP_DYNAMIC_BEAT_LOCK || isBeatAligned(beatPhase, bpmConfidence, pulse);
+  if (!beatLocked) return;
+
+  goRandomPreset();
+  lastAutoPresetAtMs = nowMs;
+  mashupDynamicArmed = false;
+  dropSyncPending = false;
+}
+
 // ─── Render Loop ──────────────────────────────────────────────────────────────
 function renderLoop() {
   requestAnimationFrame(renderLoop);
+
+  const nowMs = performance.now();
+  const frameDeltaMs = nowMs - lastFrameAtMs;
+  if (frameDeltaMs > 0) {
+    const fpsInstant = 1000 / frameDeltaMs;
+    fpsSmoothed += (fpsInstant - fpsSmoothed) * 0.12;
+    if (showFps) {
+      ui.updateFps(fpsSmoothed);
+    }
+  }
+  lastFrameAtMs = nowMs;
+
   const { composer } = sceneCtx;
 
   if (!audio.isAudioConnected) {
@@ -246,15 +562,85 @@ function renderLoop() {
   const transient = Math.max(0, energyFast - energySlow);
   transientPulse += (transient * 2.2 + subBass * 0.25 + spectralFluxGate * 0.5 - transientPulse) * 0.18;
   const pulse = Math.min(transientPulse, 1.0);
+
+  const transientNorm = robustNormalize(transientHistory, transient, ROBUST_WINDOW_FRAMES);
+  const fluxNorm = robustNormalize(fluxHistory, spectralFluxGate, ROBUST_WINDOW_FRAMES);
+  const energyNorm = robustNormalize(energyHistory, energy, ROBUST_WINDOW_FRAMES);
+  const spectralStability = computeSpectralStability(fluxHistory);
+  const scoreVolatility = computeVolatility(dynamicScoreHistory);
+
+  const harmonicHue = engine.get_harmonic_hue();
+  const harmonicConfidence = engine.get_harmonic_confidence();
+  const detectedBpm = engine.get_detected_bpm();
+  const bpmConfidence = engine.get_bpm_confidence();
+  const beatPhase = engine.get_beat_phase();
+  const beatPulse = Math.max(0, Math.sin(beatPhase * Math.PI * 2));
+  const predictedEnergy = engine.get_predicted_energy(CONFIG.MASHUP_PREDICTION_HORIZON_SEC);
+  const macroPredictedEnergy = engine.get_predicted_energy(CONFIG.MASHUP_MACRO_HORIZON_SEC);
+
+  harmonicConfidenceSmooth += (harmonicConfidence - harmonicConfidenceSmooth) * 0.18;
+  bpmSmooth += (detectedBpm - bpmSmooth) * 0.1;
+  bpmConfidenceSmooth += (bpmConfidence - bpmConfidenceSmooth) * 0.15;
+  predictedEnergyLead += (predictedEnergy - predictedEnergyLead) * 0.2;
+  beatPulseSmooth += (beatPulse - beatPulseSmooth) * 0.22;
+
+  const trend = clampSigned((predictedEnergyLead - energy) / 0.22);
+  const spectralClarity = clamp01(1 - fluxNorm * 1.15);
+  const dropLikelihood = computeDropLikelihood({
+    energy: energyNorm,
+    predictedEnergy: predictedEnergyLead,
+    macroPredictedEnergy,
+    transient: transientNorm,
+    pulse,
+    bpmConfidence: bpmConfidenceSmooth,
+    scoreVolatility,
+  });
   
-  const nowMs = performance.now();
   const time = nowMs * 0.0003;
-  maybeMutatePreset(dynamicRangeVisual, Math.max(pulse, spectralFluxGate), nowMs);
+
+  const dynamicMashupScore = computeDynamicMashupScore({
+    transient: transientNorm,
+    spectralFluxGate: fluxNorm,
+    pulse,
+    energy: energyNorm,
+    predictedEnergy: predictedEnergyLead,
+    dynamicRange: dynamicRangeVisual,
+    loudnessDrift,
+    beatPhase,
+    bpmConfidence: bpmConfidenceSmooth,
+    harmonicConfidence: harmonicConfidenceSmooth,
+    trend,
+    spectralClarity,
+    scoreVolatility,
+  });
+
+  pushRolling(dynamicScoreHistory, dynamicMashupScore, VOLATILITY_WINDOW_FRAMES);
+
+  if (CONFIG.MASHUP_DYNAMIC_MODE) {
+    maybeMashupDynamic(
+      dynamicMashupScore,
+      nowMs,
+      pulse,
+      dynamicRangeVisual,
+      beatPhase,
+      bpmConfidenceSmooth,
+      scoreVolatility,
+      dropLikelihood,
+    );
+  } else {
+    maybeMutatePreset(dynamicRangeVisual, Math.max(pulse, fluxNorm), nowMs);
+  }
+
+  const transitionBlend = clamp01(
+    (presetTransitionEndsAtMs - nowMs) / CONFIG.MASHUP_TRANSITION_TARGET_MS,
+  );
+  const transitionSoftness = 1 - transitionBlend * 0.42;
 
   const presetIdx = engine.current_preset_index();
   const env = getPresetEnvironment(presetIdx, dynamicRangeVisual, Math.max(pulse, spectralFluxGate), CONFIG.ENVIRONMENT_MODE);
 
   const under150HzStereo = Math.max(under150Left, under150Right);
+  const lowGateNormalized = robustNormalize(lowBandHistory, under150HzStereo, ROBUST_WINDOW_FRAMES);
   const lowGate = clamp01((under150HzStereo - 0.26) / 0.56);
   const glitchFrame = sceneCtx.glitchController.update(
     nowMs,
@@ -272,34 +658,64 @@ function renderLoop() {
 
   // 4. Update Colors & Scene Items
   
-  // Extraer Tonalidad Directa de Rust (El Note Pitch mayoritario del Acorde actual)
-  const detectedHue = engine.get_chroma_base();
-
-  // Color Hop Logic orgánico: en lugar de giros aleatorios al azar, Dalia desliza sus pigmentos 
-  // armónicamente buscando siempre empatar con la escala de la canción. 
-  // En las transiciones de canciones violentas, se adapta rápidamente, pero decae lento para no parpadear con distorsiones vocales menores.
-  const adaptSpeed = (transient > 0.8 || pulse > 0.8) ? 0.08 : 0.008;
-  masterHueBase += (detectedHue - masterHueBase) * adaptSpeed;
+  const adaptSpeed = Math.max(
+    0.018,
+    Math.min(
+      0.14,
+      0.02 +
+        harmonicConfidenceSmooth * 0.07 +
+        transient * 0.04 +
+        pulse * 0.03 +
+        beatPulseSmooth * 0.02,
+    ) * transitionSoftness,
+  );
+  const hueDelta = ((harmonicHue - masterHueBase + 0.5) % 1 + 1) % 1 - 0.5;
+  masterHueBase += hueDelta * adaptSpeed;
+  masterHueBase += (beatPulseSmooth - 0.35) * 0.006 * bpmConfidenceSmooth;
   masterHueBase = (masterHueBase % 1.0 + 1.0) % 1.0; // clamp seguro circular
 
-  const dynamicSaturation = Math.max(0.65, Math.min(1.0, 0.7 + treb * 0.3));
-  const dynamicLightness = Math.max(0.25, Math.min(0.55, 0.4 + energy * 0.15));
+  const harmonyEmphasis = clamp01(harmonicConfidenceSmooth * 1.35);
+  const dynamicSaturation = Math.max(
+    0.62,
+    Math.min(
+      1.0,
+      0.66 +
+        treb * 0.18 +
+        harmonyEmphasis * 0.22 +
+        beatPulseSmooth * 0.06 +
+        predictedEnergyLead * 0.08,
+    ),
+  );
+  const dynamicLightness = Math.max(
+    0.24,
+    Math.min(
+      0.56,
+      0.34 +
+        energy * 0.11 +
+        harmonyEmphasis * 0.07 +
+        macroPredictedEnergy * 0.03 -
+        glitchDrive * 0.04,
+    ),
+  );
   
   const baseColor = new THREE.Color().setHSL(masterHueBase, dynamicSaturation, dynamicLightness);
+  const harmonyHighlightColor = new THREE.Color().setHSL(masterHueBase, 1.0, 0.72);
   const accentAColor = new THREE.Color().setHSL((masterHueBase + 0.5) % 1.0, 1.0, 0.65); // Complementario directo
   const accentBColor = new THREE.Color().setHSL((masterHueBase + 0.15) % 1.0, 1.0, 0.65); // Análogo o Split Complementario
   const leftColor = new THREE.Color().setHSL((masterHueBase + 0.33) % 1.0, dynamicSaturation, dynamicLightness);
   const rightColor = new THREE.Color().setHSL((masterHueBase + 0.66) % 1.0, dynamicSaturation, dynamicLightness);
 
-  const accentMix = clamp01(0.16 + stereoWidthSmooth * 0.34 + pulse * 0.12);
+  const accentMix = clamp01(0.16 + stereoWidthSmooth * 0.34 + pulse * 0.12 + harmonyEmphasis * 0.2);
 
-  spectralColor.lerp(baseColor, 0.16);
-  // Reduje el whiteMix dramáticamente para evitar que el centro sea blanco quema corneas
-  const whiteMix = Math.max(0.01, Math.min(0.08, energy * 0.06 + pulse * 0.04));
+  spectralColor.lerp(baseColor, Math.max(0.24, Math.min(0.55, 0.28 + harmonyEmphasis * 0.24)));
+  const whiteMix = Math.max(0.004, Math.min(0.06, (energy * 0.06 + pulse * 0.04) * (1 - harmonyEmphasis * 0.75)));
   liveColor.copy(spectralColor).lerp(WHITE_POINT, whiteMix);
   
-  sceneCtx.pointsMaterial.color.lerp(liveColor, 0.14);
-  sceneCtx.centerAccentMaterial.color.copy(accentBColor).lerp(accentColorB, accentMix * 0.2);
+  sceneCtx.pointsMaterial.color.lerp(liveColor, 0.22 + harmonyEmphasis * 0.3);
+  sceneCtx.centerAccentMaterial.color
+    .copy(accentBColor)
+    .lerp(harmonyHighlightColor, 0.45 + harmonyEmphasis * 0.45)
+    .lerp(accentColorB, accentMix * 0.18);
   sceneCtx.centerAccentMaterial.opacity = clamp01(0.05 + plrVisual * 0.12 + stereoWidthSmooth * 0.08);
   sceneCtx.centerAccentMaterial.size = Math.max(0.014, sceneCtx.pointsMaterial.size * (0.62 + pulse * 0.16));
 
@@ -313,7 +729,7 @@ function renderLoop() {
   sceneCtx.leftAccentMaterial.opacity = clamp01(0.05 + leftEnergySmooth * 0.14 + stereoWidthSmooth * 0.08);
   sceneCtx.rightAccentMaterial.opacity = clamp01(0.05 + rightEnergySmooth * 0.14 + stereoWidthSmooth * 0.08);
 
-  sceneCtx.textureMaterial.color.lerp(spectralColor, 0.1);
+  sceneCtx.textureMaterial.color.lerp(spectralColor, 0.16 + harmonyEmphasis * 0.16);
   sceneCtx.pointsMaterial.opacity = Math.max(0.26, Math.min(0.62, 0.36 + presence * 0.1 + air * 0.05 + pulse * 0.03));
   sceneCtx.leftPointsMaterial.opacity = clamp01(0.08 + leftEnergySmooth * 0.2 + stereoWidthSmooth * 0.16);
   sceneCtx.rightPointsMaterial.opacity = clamp01(0.08 + rightEnergySmooth * 0.2 + stereoWidthSmooth * 0.16);
@@ -352,7 +768,7 @@ function renderLoop() {
   sceneCtx.noisePoints.rotation.x = Math.sin(time * 0.12) * 0.08 + psy.coreLift * 0.03;
   sceneCtx.noiseMaterial.opacity = Math.max(0.04, Math.min(0.26, env.noiseOpacity));
   sceneCtx.noiseMaterial.size = Math.max(0.006, Math.min(0.03, env.noiseSize));
-  sceneCtx.noiseMaterial.color.copy(spectralColor).lerp(WHITE_POINT, 0.06);
+  sceneCtx.noiseMaterial.color.copy(spectralColor).lerp(WHITE_POINT, Math.max(0.01, 0.06 * (1 - harmonyEmphasis * 0.6)));
 
   const tunnelAttr = sceneCtx.tunnelGeometry.getAttribute('position') as THREE.BufferAttribute;
   const tunnelCount = tunnelAttr.count;
@@ -416,13 +832,13 @@ function renderLoop() {
   sceneCtx.noisePoints.position.z = -0.2 + warpY * 2.1 + psy.lookDepth * 0.08;
 
   // Limitador extremo de Bloom
-  const targetBloom = Math.max(0.1, Math.min(0.5, 0.15 + subBass * 0.1 + energy * 0.08 + pulse * 0.08 + air * 0.02 + dynamicRangeVisual * 0.02 + plrVisual * 0.02 + loudnessDrift * 0.02 + glitchDrive * 0.01 + spectralFluxGate * 0.02 + env.bloomBoost * 0.5 + psy.depthPulse * 0.02));
+  const targetBloom = Math.max(0.1, Math.min(0.5, (0.15 + subBass * 0.1 + energy * 0.08 + pulse * 0.08 + air * 0.02 + dynamicRangeVisual * 0.02 + plrVisual * 0.02 + loudnessDrift * 0.02 + glitchDrive * 0.01 + spectralFluxGate * 0.02 + env.bloomBoost * 0.5 + psy.depthPulse * 0.02) * transitionSoftness));
   sceneCtx.bloomPass.strength += (targetBloom - sceneCtx.bloomPass.strength) * 0.06;
   sceneCtx.bloomPass.radius = Math.max(0.05, Math.min(0.22, 0.08 + treb * 0.08 + pulse * 0.04 + plrVisual * 0.02 + glitchDrive * 0.01 + psy.parallax * 0.01));
   sceneCtx.bloomPass.threshold = Math.max(0.2, Math.min(0.45, 0.3 + (1.0 - energy) * 0.09 - pulse * 0.02 - dynamicRangeVisual * 0.02 - glitchDrive * 0.01 - psy.depthPulse * 0.01));
   sceneCtx.bloomPass.strength = Math.min(sceneCtx.bloomPass.strength, 0.5);
 
-  const camShake = Math.min(0.07, glitchDrive * 0.014 + transient * 0.012 + plrVisual * 0.01 + psy.depthPulse * 0.012);
+  const camShake = Math.min(0.07, (glitchDrive * 0.014 + transient * 0.012 + plrVisual * 0.01 + psy.depthPulse * 0.012) * transitionSoftness);
   const jitterX = (Math.random() - 0.5) * camShake;
   const jitterY = (Math.random() - 0.5) * camShake * 0.6;
   const jitterZ = (Math.random() - 0.5) * camShake;
@@ -474,16 +890,27 @@ function renderLoop() {
   const isHeavyPreset = presetIdx > 7;
   const isInfernalBass = under150HzStereo > 0.48; // Disparo desde frecuencias infernales
   const hasBassTrigger = under150HzStereo > 0.20; // Condicionante base pedido por usuario
+  const harmonyGate = 1 - clampDynamics(harmonyEmphasis * 0.55);
   
   // Condición exigida: El Glitch se corta de cuajo (abruptamente) si no hay bajos presentes
-  sceneCtx.glitchPass.enabled = glitchFrame.enabled && isHeavyPreset && hasBassTrigger;
-  sceneCtx.glitchPass.goWild = glitchFrame.goWild && isHeavyPreset && hasBassTrigger;
+  sceneCtx.glitchPass.enabled =
+    glitchFrame.enabled && isHeavyPreset && hasBassTrigger && glitchFrame.level * harmonyGate * transitionSoftness > 0.12;
+  sceneCtx.glitchPass.goWild =
+    glitchFrame.goWild && isHeavyPreset && hasBassTrigger && harmonyEmphasis < 0.62 && transitionBlend < 0.85;
   
-  // Aberración Cromática controlada drásticamente
-  const aberrationAmount = isInfernalBass ? (under150HzStereo * 0.015) : 0;
+  // Aberracion cromatica subordinada a la confianza armonica.
+  const aberrationAmount = computeAberrationAmount({
+    lowGate: under150HzStereo,
+    lowGateNormalized,
+    harmonyConfidence: harmonicConfidenceSmooth,
+    hasBassTrigger: isInfernalBass,
+    beatPulse: beatPulseSmooth,
+    spectralStability,
+    chromaAutocorrelation: harmonicConfidenceSmooth,
+  }) * transitionSoftness;
   // Smoothing lineal de la aberración para que baje como si fuera fluida
   sceneCtx.rgbShiftPass.uniforms['amount'].value += (aberrationAmount - sceneCtx.rgbShiftPass.uniforms['amount'].value) * 0.2;
-  sceneCtx.rgbShiftPass.uniforms['angle'].value = (time * 2.0 + subBass * Math.PI);
+  sceneCtx.rgbShiftPass.uniforms['angle'].value = time * (1.6 + bpmSmooth / 180) + subBass * Math.PI;
   
   const jitter = isHeavyPreset ? glitchFrame.jitter : 0.0;
   sceneCtx.points.position.x = panShift * 0.24 + psy.lateralDrift * 0.32 + (Math.random() - 0.5) * jitter;
@@ -511,6 +938,13 @@ async function main() {
   
   ui.initTrackPicker(CONFIG.DEFAULT_TRACK_NAME);
 
+  window.addEventListener('keydown', (event) => {
+    const isHardReloadKey = event.ctrlKey && event.shiftKey && (event.key === 'R' || event.key === 'r');
+    if (isHardReloadKey) {
+      clearPersistedUiState();
+    }
+  });
+
   window.addEventListener('resize', () => {
     if (!sceneCtx.camera || !sceneCtx.renderer) return;
     sceneCtx.camera.aspect = window.innerWidth / window.innerHeight;
@@ -523,9 +957,19 @@ async function main() {
     recorder.toggleRecording(ui.canvas, audio.audioDestination, ui.recordBtn);
   });
 
-  ui.insertPresetControls(goPrevPreset, goNextPreset, () => setMashupMode(!mashupEnabled));
+  ui.insertPresetControls(goPrevPreset, goNextPreset, {
+    presetNames: CONFIG.PRESET_NAMES,
+    mashupEnabled,
+    fpsEnabled: showFps,
+    onToggleMashup: setMashupMode,
+    onApplyPreset: setPresetByIndex,
+    onToggleFps: setFpsMode,
+  });
 
-  try { syncPresetUI(); } catch (_) {}
+  const restoredState = applyPersistedUiState();
+  if (!restoredState) {
+    try { syncPresetUI(); } catch (_) {}
+  }
 
   renderLoop();
 }
