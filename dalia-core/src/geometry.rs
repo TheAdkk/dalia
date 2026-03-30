@@ -626,18 +626,18 @@ mod tests {
     use crate::presets::Preset;
 
     fn sample_audio_state() -> AudioState {
-        AudioState {
-            sub_bass: 0.52,
-            bass: 0.61,
-            low_mid: 0.33,
-            mid: 0.47,
-            upper_mid: 0.38,
-            presence: 0.29,
-            treb: 0.42,
-            air: 0.2,
-            energy: 0.58,
-            chroma: [0.0; 12],
-        }
+        let mut state = AudioState::new();
+        state.sub_bass = 0.52;
+        state.bass = 0.61;
+        state.low_mid = 0.33;
+        state.mid = 0.47;
+        state.upper_mid = 0.38;
+        state.presence = 0.29;
+        state.treb = 0.42;
+        state.air = 0.2;
+        state.energy = 0.58;
+        state.chroma = [0.0; 12];
+        state
     }
 
     #[test]

@@ -35,8 +35,36 @@ export class DaliaEngine {
     /**
      * @returns {number}
      */
+    get_beat_phase() {
+        const ret = wasm.daliaengine_get_beat_phase(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_bpm_confidence() {
+        const ret = wasm.daliaengine_get_bpm_confidence(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_buffered_energy_mean() {
+        const ret = wasm.daliaengine_get_buffered_energy_mean(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
     get_chroma_base() {
         const ret = wasm.daliaengine_get_chroma_base(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_detected_bpm() {
+        const ret = wasm.daliaengine_get_detected_bpm(this.__wbg_ptr);
         return ret;
     }
     /**
@@ -63,6 +91,20 @@ export class DaliaEngine {
     /**
      * @returns {number}
      */
+    get_harmonic_confidence() {
+        const ret = wasm.daliaengine_get_harmonic_confidence(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_harmonic_hue() {
+        const ret = wasm.daliaengine_get_harmonic_hue(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
     get_low_mid() {
         const ret = wasm.daliaengine_get_low_mid(this.__wbg_ptr);
         return ret;
@@ -72,6 +114,14 @@ export class DaliaEngine {
      */
     get_mid() {
         const ret = wasm.daliaengine_get_mid(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {number} horizon_seconds
+     * @returns {number}
+     */
+    get_predicted_energy(horizon_seconds) {
+        const ret = wasm.daliaengine_get_predicted_energy(this.__wbg_ptr, horizon_seconds);
         return ret;
     }
     /**

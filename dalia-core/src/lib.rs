@@ -40,6 +40,15 @@ impl DaliaEngine {
     pub fn get_upper_mid(&self) -> f32 { self.audio_state.upper_mid }
     pub fn get_air(&self)    -> f32 { self.audio_state.air }
     pub fn get_presence(&self) -> f32 { self.audio_state.presence }
+    pub fn get_harmonic_hue(&self) -> f32 { self.audio_state.harmonic_hue() }
+    pub fn get_harmonic_confidence(&self) -> f32 { self.audio_state.harmonic_confidence() }
+    pub fn get_detected_bpm(&self) -> f32 { self.audio_state.detected_bpm() }
+    pub fn get_bpm_confidence(&self) -> f32 { self.audio_state.bpm_confidence() }
+    pub fn get_beat_phase(&self) -> f32 { self.audio_state.beat_phase() }
+    pub fn get_predicted_energy(&self, horizon_seconds: f32) -> f32 {
+        self.audio_state.predicted_energy(horizon_seconds)
+    }
+    pub fn get_buffered_energy_mean(&self) -> f32 { self.audio_state.buffered_energy_mean() }
     
     // Obtiene el tono logarítmico (0.0..1.0) para mapeo a HSL directo basado en el acorde más ruidoso
     pub fn get_chroma_base(&self) -> f32 {
