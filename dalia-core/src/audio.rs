@@ -5,6 +5,8 @@ const ASSUMED_FPS: f32 = 60.0;
 const HISTORY_CAPACITY: usize = (HISTORY_SECONDS * ASSUMED_FPS) as usize;
 const BPM_MIN: f32 = 70.0;
 const BPM_MAX: f32 = 190.0;
+const LOOKAHEAD_SAMPLE_STEPS: usize = 12;
+const MIN_ANALYSIS_SECONDS: f32 = 2.0;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct AudioFrame {
@@ -12,6 +14,14 @@ struct AudioFrame {
     transient: f32,
     flux: f32,
     onset: f32,
+    low_band: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct LookaheadFrame {
+    energy: f32,
+    transient: f32,
+    low_band: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -35,6 +45,8 @@ pub struct AudioState {
     history: Vec<AudioFrame>,
     history_cursor: usize,
     history_len: usize,
+    lookahead_timeline: Vec<LookaheadFrame>,
+    lookahead_timeline_fps: f32,
     prev_spectrum: Vec<f32>,
     elapsed_seconds: f32,
     bpm: f32,
@@ -64,6 +76,8 @@ impl Default for AudioState {
             history: vec![AudioFrame::default(); HISTORY_CAPACITY],
             history_cursor: 0,
             history_len: 0,
+            lookahead_timeline: Vec::new(),
+            lookahead_timeline_fps: 0.0,
             prev_spectrum: Vec::new(),
             elapsed_seconds: 0.0,
             bpm: 120.0,
@@ -96,6 +110,206 @@ impl AudioState {
 
     pub fn beat_phase(&self) -> f32 {
         self.beat_phase
+    }
+
+    pub fn spectral_flux_gate(&self) -> f32 {
+        ((self.spectral_flux - 0.005) / 0.04).clamp(0.0, 1.0)
+    }
+
+    pub fn transient_strength(&self) -> f32 {
+        let flux_gate = self.spectral_flux_gate();
+        (self.transient * 2.1 + flux_gate * 0.9 + self.sub_bass * 0.35).clamp(0.0, 1.0)
+    }
+
+    pub fn analysis_readiness(&self) -> f32 {
+        let target_frames = (ASSUMED_FPS * MIN_ANALYSIS_SECONDS).round() as usize;
+        if target_frames == 0 {
+            return 1.0;
+        }
+        (self.history_len as f32 / target_frames as f32).clamp(0.0, 1.0)
+    }
+
+    pub fn low_band_energy(&self) -> f32 {
+        (self.sub_bass * 0.58 + self.bass * 0.42).clamp(0.0, 1.0)
+    }
+
+    pub fn set_lookahead_timeline(
+        &mut self,
+        energy_timeline: &[f32],
+        transient_timeline: &[f32],
+        low_band_timeline: &[f32],
+        fps: f32,
+    ) -> bool {
+        self.clear_lookahead_timeline();
+
+        if !fps.is_finite() || fps <= 0.0 {
+            return false;
+        }
+
+        let len = energy_timeline
+            .len()
+            .min(transient_timeline.len())
+            .min(low_band_timeline.len());
+
+        if len == 0 {
+            return false;
+        }
+
+        self.lookahead_timeline.reserve(len);
+        for i in 0..len {
+            let sanitize = |value: f32| {
+                if value.is_finite() {
+                    value.clamp(0.0, 1.0)
+                } else {
+                    0.0
+                }
+            };
+
+            self.lookahead_timeline.push(LookaheadFrame {
+                energy: sanitize(energy_timeline[i]),
+                transient: sanitize(transient_timeline[i]),
+                low_band: sanitize(low_band_timeline[i]),
+            });
+        }
+
+        self.lookahead_timeline_fps = fps;
+        true
+    }
+
+    pub fn clear_lookahead_timeline(&mut self) {
+        self.lookahead_timeline.clear();
+        self.lookahead_timeline_fps = 0.0;
+    }
+
+    pub fn has_lookahead_timeline(&self) -> bool {
+        !self.lookahead_timeline.is_empty() && self.lookahead_timeline_fps > 0.0
+    }
+
+    pub fn future_energy_mean_at(&self, current_time_seconds: f32, horizon_seconds: f32) -> f32 {
+        if !self.has_lookahead_timeline() {
+            return self.future_energy_mean(horizon_seconds);
+        }
+
+        if horizon_seconds <= 0.0 {
+            return self
+                .lookahead_sample_at(current_time_seconds)
+                .map(|frame| frame.energy)
+                .unwrap_or(self.energy);
+        }
+
+        let horizon = horizon_seconds.clamp(0.0, HISTORY_SECONDS);
+        let mut sum = 0.0_f32;
+        let mut count = 0.0_f32;
+
+        for step in 0..=LOOKAHEAD_SAMPLE_STEPS {
+            let t = current_time_seconds + horizon * step as f32 / LOOKAHEAD_SAMPLE_STEPS as f32;
+            if let Some(frame) = self.lookahead_sample_at(t) {
+                sum += frame.energy;
+                count += 1.0;
+            }
+        }
+
+        if count <= 0.0 {
+            self.future_energy_mean(horizon_seconds)
+        } else {
+            (sum / count).clamp(0.0, 1.0)
+        }
+    }
+
+    pub fn future_transient_peak_at(&self, current_time_seconds: f32, horizon_seconds: f32) -> f32 {
+        if !self.has_lookahead_timeline() {
+            return self.future_transient_peak(horizon_seconds);
+        }
+
+        let horizon = horizon_seconds.clamp(0.0, HISTORY_SECONDS);
+        let mut recent_peak = 0.0_f32;
+        let recent_window = ((ASSUMED_FPS * 0.8).round() as usize).max(1);
+
+        for i in 0..recent_window {
+            let t = (current_time_seconds - i as f32 / ASSUMED_FPS).max(0.0);
+            if let Some(frame) = self.lookahead_sample_at(t) {
+                recent_peak = recent_peak.max(frame.transient);
+            }
+        }
+
+        let mut future_peak = 0.0_f32;
+        let mut prev_energy = self
+            .lookahead_sample_at(current_time_seconds)
+            .map(|frame| frame.energy)
+            .unwrap_or(self.energy);
+
+        for step in 1..=LOOKAHEAD_SAMPLE_STEPS {
+            let t = current_time_seconds + horizon * step as f32 / LOOKAHEAD_SAMPLE_STEPS as f32;
+            if let Some(frame) = self.lookahead_sample_at(t) {
+                let derivative = (frame.energy - prev_energy).max(0.0);
+                let candidate = (frame.transient * 0.86 + derivative * 1.14).clamp(0.0, 1.0);
+                future_peak = future_peak.max(candidate);
+                prev_energy = frame.energy;
+            }
+        }
+
+        recent_peak.max(future_peak).clamp(0.0, 1.0)
+    }
+
+    pub fn future_bass_sustain_ratio_at(
+        &self,
+        current_time_seconds: f32,
+        horizon_seconds: f32,
+        threshold: f32,
+    ) -> f32 {
+        if !self.has_lookahead_timeline() {
+            return self.future_bass_sustain_ratio(horizon_seconds, threshold);
+        }
+
+        let threshold = threshold.clamp(0.0, 1.0);
+        if horizon_seconds <= 0.0 {
+            return self
+                .lookahead_sample_at(current_time_seconds)
+                .map(|frame| if frame.low_band >= threshold { 1.0 } else { 0.0 })
+                .unwrap_or(0.0);
+        }
+
+        let horizon = horizon_seconds.clamp(0.0, HISTORY_SECONDS);
+        let mut hits = 0.0_f32;
+        let mut count = 0.0_f32;
+
+        for step in 1..=LOOKAHEAD_SAMPLE_STEPS {
+            let t = current_time_seconds + horizon * step as f32 / LOOKAHEAD_SAMPLE_STEPS as f32;
+            if let Some(frame) = self.lookahead_sample_at(t) {
+                if frame.low_band >= threshold {
+                    hits += 1.0;
+                }
+                count += 1.0;
+            }
+        }
+
+        if count <= 0.0 {
+            0.0
+        } else {
+            (hits / count).clamp(0.0, 1.0)
+        }
+    }
+
+    pub fn should_hold_for_sustained_bass_at(
+        &self,
+        current_time_seconds: f32,
+        horizon_seconds: f32,
+        threshold: f32,
+        min_ratio: f32,
+    ) -> bool {
+        if !self.has_lookahead_timeline() {
+            return self.should_hold_for_sustained_bass(horizon_seconds, threshold, min_ratio);
+        }
+
+        let threshold = threshold.clamp(0.0, 1.0);
+        let min_ratio = min_ratio.clamp(0.0, 1.0);
+        let sustain_ratio = self.future_bass_sustain_ratio_at(current_time_seconds, horizon_seconds, threshold);
+        let current_low_band = self
+            .lookahead_sample_at(current_time_seconds)
+            .map(|frame| frame.low_band)
+            .unwrap_or(0.0);
+
+        sustain_ratio >= min_ratio && current_low_band >= threshold * 0.82
     }
 
     pub fn buffered_energy_mean(&self) -> f32 {
@@ -148,6 +362,106 @@ impl AudioState {
         }
 
         predicted.clamp(0.0, 1.0)
+    }
+
+    pub fn predicted_low_band(&self, horizon_seconds: f32) -> f32 {
+        if self.history_len < 4 {
+            return self.low_band_energy();
+        }
+
+        let horizon = horizon_seconds.clamp(0.0, HISTORY_SECONDS);
+        let frames_ahead = (horizon * ASSUMED_FPS).round() as usize;
+
+        let latest = self.frame_from_end(0).low_band;
+        let lookback = (ASSUMED_FPS * 0.9).round() as usize;
+        let back = lookback.min(self.history_len.saturating_sub(1)).max(1);
+        let past = self.frame_from_end(back).low_band;
+        let slope = (latest - past) / back as f32;
+
+        let trend_lift = (self.predicted_energy(horizon) - self.energy).max(-0.3);
+        let predicted =
+            latest + slope * frames_ahead as f32 * 0.75 + trend_lift * 0.22 + self.transient * 0.08;
+
+        predicted.clamp(0.0, 1.0)
+    }
+
+    pub fn future_energy_mean(&self, horizon_seconds: f32) -> f32 {
+        if horizon_seconds <= 0.0 {
+            return self.energy;
+        }
+
+        let horizon = horizon_seconds.clamp(0.0, HISTORY_SECONDS);
+        let mut sum = self.energy;
+        let mut count = 1.0;
+
+        for step in 1..=LOOKAHEAD_SAMPLE_STEPS {
+            let t = horizon * step as f32 / LOOKAHEAD_SAMPLE_STEPS as f32;
+            sum += self.predicted_energy(t);
+            count += 1.0;
+        }
+
+        (sum / count).clamp(0.0, 1.0)
+    }
+
+    pub fn future_transient_peak(&self, horizon_seconds: f32) -> f32 {
+        let horizon = horizon_seconds.clamp(0.0, HISTORY_SECONDS);
+        let recent_window = ((ASSUMED_FPS * 0.8).round() as usize)
+            .min(self.history_len)
+            .max(1);
+
+        let mut recent_peak = 0.0_f32;
+        for i in 0..recent_window {
+            recent_peak = recent_peak.max(self.frame_from_end(i).onset);
+        }
+
+        let mut future_peak = 0.0_f32;
+        let mut prev_energy = self.energy;
+        for step in 1..=LOOKAHEAD_SAMPLE_STEPS {
+            let t = horizon * step as f32 / LOOKAHEAD_SAMPLE_STEPS as f32;
+            let energy = self.predicted_energy(t);
+            let derivative = (energy - prev_energy).max(0.0);
+            let candidate =
+                (derivative * 3.4 + self.transient * 1.1 + self.spectral_flux_gate() * 0.7).clamp(0.0, 1.0);
+            future_peak = future_peak.max(candidate);
+            prev_energy = energy;
+        }
+
+        recent_peak.max(future_peak * 0.92).clamp(0.0, 1.0)
+    }
+
+    pub fn future_bass_sustain_ratio(&self, horizon_seconds: f32, threshold: f32) -> f32 {
+        let threshold = threshold.clamp(0.0, 1.0);
+        if horizon_seconds <= 0.0 {
+            return if self.low_band_energy() >= threshold { 1.0 } else { 0.0 };
+        }
+
+        let horizon = horizon_seconds.clamp(0.0, HISTORY_SECONDS);
+        let mut hits = 0.0_f32;
+        for step in 1..=LOOKAHEAD_SAMPLE_STEPS {
+            let t = horizon * step as f32 / LOOKAHEAD_SAMPLE_STEPS as f32;
+            if self.predicted_low_band(t) >= threshold {
+                hits += 1.0;
+            }
+        }
+
+        (hits / LOOKAHEAD_SAMPLE_STEPS as f32).clamp(0.0, 1.0)
+    }
+
+    pub fn should_hold_for_sustained_bass(
+        &self,
+        horizon_seconds: f32,
+        threshold: f32,
+        min_ratio: f32,
+    ) -> bool {
+        if self.analysis_readiness() < 0.22 {
+            return false;
+        }
+
+        let threshold = threshold.clamp(0.0, 1.0);
+        let min_ratio = min_ratio.clamp(0.0, 1.0);
+        let sustain_ratio = self.future_bass_sustain_ratio(horizon_seconds, threshold);
+
+        sustain_ratio >= min_ratio && self.low_band_energy() >= threshold * 0.82
     }
 
     pub fn process_audio(&mut self, frequency_data: &[u8], processed_data: &mut Vec<f32>, hz_per_bin: f32) {
@@ -255,14 +569,15 @@ impl AudioState {
 
         self.elapsed_seconds += 1.0 / ASSUMED_FPS;
 
-        let flux_gate = ((self.spectral_flux - 0.005) / 0.04).clamp(0.0, 1.0);
-        let onset = (self.transient * 2.1 + flux_gate * 0.9 + self.sub_bass * 0.35).clamp(0.0, 1.0);
+        let onset = self.transient_strength();
+        let low_band = self.low_band_energy();
 
         self.push_frame(AudioFrame {
             energy: self.energy,
             transient: self.transient,
             flux: self.spectral_flux,
             onset,
+            low_band,
         });
 
         self.update_bpm_estimate();
@@ -278,6 +593,36 @@ impl AudioState {
         let cap = self.history.len();
         let idx = (self.history_cursor + cap - 1 - (back % cap)) % cap;
         self.history[idx]
+    }
+
+    fn lookahead_sample_at(&self, time_seconds: f32) -> Option<LookaheadFrame> {
+        if !self.has_lookahead_timeline() {
+            return None;
+        }
+
+        let max_index = self.lookahead_timeline.len().saturating_sub(1);
+        if max_index == 0 {
+            return self.lookahead_timeline.first().copied();
+        }
+
+        let t = if time_seconds.is_finite() {
+            time_seconds.max(0.0)
+        } else {
+            0.0
+        };
+        let frame_position = (t * self.lookahead_timeline_fps).clamp(0.0, max_index as f32);
+        let idx_a = frame_position.floor() as usize;
+        let idx_b = (idx_a + 1).min(max_index);
+        let frac = frame_position - idx_a as f32;
+
+        let frame_a = self.lookahead_timeline[idx_a];
+        let frame_b = self.lookahead_timeline[idx_b];
+
+        Some(LookaheadFrame {
+            energy: frame_a.energy + (frame_b.energy - frame_a.energy) * frac,
+            transient: frame_a.transient + (frame_b.transient - frame_a.transient) * frac,
+            low_band: frame_a.low_band + (frame_b.low_band - frame_a.low_band) * frac,
+        })
     }
 
     fn update_harmonic_hue(&mut self) {
@@ -409,6 +754,28 @@ mod tests {
         assert!((0.0..=1.0).contains(&state.predicted_energy(0.6)));
         assert!(state.predicted_energy(6.0).is_finite());
         assert!((0.0..=1.0).contains(&state.predicted_energy(6.0)));
+        assert!(state.spectral_flux_gate().is_finite());
+        assert!((0.0..=1.0).contains(&state.spectral_flux_gate()));
+        assert!(state.transient_strength().is_finite());
+        assert!((0.0..=1.0).contains(&state.transient_strength()));
+        assert!(state.analysis_readiness().is_finite());
+        assert!((0.0..=1.0).contains(&state.analysis_readiness()));
+        assert!(state.low_band_energy().is_finite());
+        assert!((0.0..=1.0).contains(&state.low_band_energy()));
+        assert!(state.predicted_low_band(2.0).is_finite());
+        assert!((0.0..=1.0).contains(&state.predicted_low_band(2.0)));
+        assert!(state.future_energy_mean(2.0).is_finite());
+        assert!((0.0..=1.0).contains(&state.future_energy_mean(2.0)));
+        assert!(state.future_transient_peak(2.0).is_finite());
+        assert!((0.0..=1.0).contains(&state.future_transient_peak(2.0)));
+        assert!(state.future_bass_sustain_ratio(2.0, 0.5).is_finite());
+        assert!((0.0..=1.0).contains(&state.future_bass_sustain_ratio(2.0, 0.5)));
+        assert!(state.future_energy_mean_at(0.0, 2.0).is_finite());
+        assert!((0.0..=1.0).contains(&state.future_energy_mean_at(0.0, 2.0)));
+        assert!(state.future_transient_peak_at(0.0, 2.0).is_finite());
+        assert!((0.0..=1.0).contains(&state.future_transient_peak_at(0.0, 2.0)));
+        assert!(state.future_bass_sustain_ratio_at(0.0, 2.0, 0.5).is_finite());
+        assert!((0.0..=1.0).contains(&state.future_bass_sustain_ratio_at(0.0, 2.0, 0.5)));
     }
 
     #[test]
@@ -475,5 +842,50 @@ mod tests {
         let bpm = state.detected_bpm();
         assert!((95.0..=145.0).contains(&bpm), "detected bpm out of range: {bpm}");
         assert!(state.bpm_confidence() > 0.12);
+    }
+
+    #[test]
+    fn sustained_bass_window_triggers_hold_signal() {
+        let mut state = AudioState::new();
+        let mut processed = Vec::new();
+
+        for _ in 0..300 {
+            let mut frequency_data = vec![8_u8; 1024];
+            for value in frequency_data.iter_mut().take(48) {
+                *value = 235;
+            }
+            for value in frequency_data.iter_mut().take(120).skip(48) {
+                *value = 180;
+            }
+            state.process_audio(&frequency_data, &mut processed, 43.0);
+        }
+
+        let ratio = state.future_bass_sustain_ratio(2.4, 0.55);
+        assert!(ratio > 0.45, "bass sustain ratio too low: {ratio}");
+        assert!(state.should_hold_for_sustained_bass(2.4, 0.55, 0.5));
+    }
+
+    #[test]
+    fn absolute_timeline_queries_follow_current_time() {
+        let mut state = AudioState::new();
+
+        let energy = [0.12, 0.18, 0.95, 0.22, 0.15];
+        let transient = [0.08, 0.12, 0.86, 0.2, 0.12];
+        let low_band = [0.38, 0.82, 0.88, 0.84, 0.32];
+
+        assert!(state.set_lookahead_timeline(&energy, &transient, &low_band, 2.0));
+        assert!(state.has_lookahead_timeline());
+
+        let mean_energy = state.future_energy_mean_at(0.5, 1.2);
+        let transient_peak = state.future_transient_peak_at(0.5, 1.2);
+        let sustain_ratio = state.future_bass_sustain_ratio_at(0.5, 1.2, 0.8);
+
+        assert!(mean_energy > 0.22, "absolute mean energy too low: {mean_energy}");
+        assert!(transient_peak > 0.62, "absolute transient peak too low: {transient_peak}");
+        assert!(sustain_ratio > 0.42, "absolute bass sustain too low: {sustain_ratio}");
+        assert!(state.should_hold_for_sustained_bass_at(0.5, 1.2, 0.8, 0.42));
+
+        state.clear_lookahead_timeline();
+        assert!(!state.has_lookahead_timeline());
     }
 }

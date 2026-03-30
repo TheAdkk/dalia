@@ -11,6 +11,9 @@ export class DaliaEngine {
         const ptr = this.__destroy_into_raw();
         wasm.__wbg_daliaengine_free(ptr, 0);
     }
+    clear_lookahead_timeline() {
+        wasm.daliaengine_clear_lookahead_timeline(this.__wbg_ptr);
+    }
     /**
      * @returns {number}
      */
@@ -23,6 +26,13 @@ export class DaliaEngine {
      */
     get_air() {
         const ret = wasm.daliaengine_get_air(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_analysis_readiness() {
+        const ret = wasm.daliaengine_get_analysis_readiness(this.__wbg_ptr);
         return ret;
     }
     /**
@@ -75,6 +85,59 @@ export class DaliaEngine {
         return ret;
     }
     /**
+     * @param {number} horizon_seconds
+     * @param {number} threshold
+     * @returns {number}
+     */
+    get_future_bass_sustain_ratio(horizon_seconds, threshold) {
+        const ret = wasm.daliaengine_get_future_bass_sustain_ratio(this.__wbg_ptr, horizon_seconds, threshold);
+        return ret;
+    }
+    /**
+     * @param {number} current_time_seconds
+     * @param {number} horizon_seconds
+     * @param {number} threshold
+     * @returns {number}
+     */
+    get_future_bass_sustain_ratio_at(current_time_seconds, horizon_seconds, threshold) {
+        const ret = wasm.daliaengine_get_future_bass_sustain_ratio_at(this.__wbg_ptr, current_time_seconds, horizon_seconds, threshold);
+        return ret;
+    }
+    /**
+     * @param {number} horizon_seconds
+     * @returns {number}
+     */
+    get_future_energy_mean(horizon_seconds) {
+        const ret = wasm.daliaengine_get_future_energy_mean(this.__wbg_ptr, horizon_seconds);
+        return ret;
+    }
+    /**
+     * @param {number} current_time_seconds
+     * @param {number} horizon_seconds
+     * @returns {number}
+     */
+    get_future_energy_mean_at(current_time_seconds, horizon_seconds) {
+        const ret = wasm.daliaengine_get_future_energy_mean_at(this.__wbg_ptr, current_time_seconds, horizon_seconds);
+        return ret;
+    }
+    /**
+     * @param {number} horizon_seconds
+     * @returns {number}
+     */
+    get_future_transient_peak(horizon_seconds) {
+        const ret = wasm.daliaengine_get_future_transient_peak(this.__wbg_ptr, horizon_seconds);
+        return ret;
+    }
+    /**
+     * @param {number} current_time_seconds
+     * @param {number} horizon_seconds
+     * @returns {number}
+     */
+    get_future_transient_peak_at(current_time_seconds, horizon_seconds) {
+        const ret = wasm.daliaengine_get_future_transient_peak_at(this.__wbg_ptr, current_time_seconds, horizon_seconds);
+        return ret;
+    }
+    /**
      * @returns {number}
      */
     get_geometry_len() {
@@ -105,6 +168,13 @@ export class DaliaEngine {
     /**
      * @returns {number}
      */
+    get_low_band_energy() {
+        const ret = wasm.daliaengine_get_low_band_energy(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
     get_low_mid() {
         const ret = wasm.daliaengine_get_low_mid(this.__wbg_ptr);
         return ret;
@@ -122,6 +192,14 @@ export class DaliaEngine {
      */
     get_predicted_energy(horizon_seconds) {
         const ret = wasm.daliaengine_get_predicted_energy(this.__wbg_ptr, horizon_seconds);
+        return ret;
+    }
+    /**
+     * @param {number} horizon_seconds
+     * @returns {number}
+     */
+    get_predicted_low_band(horizon_seconds) {
+        const ret = wasm.daliaengine_get_predicted_low_band(this.__wbg_ptr, horizon_seconds);
         return ret;
     }
     /**
@@ -148,8 +226,22 @@ export class DaliaEngine {
     /**
      * @returns {number}
      */
+    get_spectral_flux_gate() {
+        const ret = wasm.daliaengine_get_spectral_flux_gate(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
     get_sub_bass() {
         const ret = wasm.daliaengine_get_sub_bass(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_transient_strength() {
+        const ret = wasm.daliaengine_get_transient_strength(this.__wbg_ptr);
         return ret;
     }
     /**
@@ -165,6 +257,13 @@ export class DaliaEngine {
     get_upper_mid() {
         const ret = wasm.daliaengine_get_upper_mid(this.__wbg_ptr);
         return ret;
+    }
+    /**
+     * @returns {boolean}
+     */
+    has_lookahead_timeline() {
+        const ret = wasm.daliaengine_has_lookahead_timeline(this.__wbg_ptr);
+        return ret !== 0;
     }
     constructor() {
         const ret = wasm.daliaengine_new();
@@ -192,6 +291,44 @@ export class DaliaEngine {
      */
     random_preset(target_idx) {
         wasm.daliaengine_random_preset(this.__wbg_ptr, target_idx);
+    }
+    /**
+     * @param {Float32Array} energy_timeline
+     * @param {Float32Array} transient_timeline
+     * @param {Float32Array} low_band_timeline
+     * @param {number} fps
+     * @returns {boolean}
+     */
+    set_lookahead_timeline(energy_timeline, transient_timeline, low_band_timeline, fps) {
+        const ptr0 = passArrayF32ToWasm0(energy_timeline, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArrayF32ToWasm0(transient_timeline, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passArrayF32ToWasm0(low_band_timeline, wasm.__wbindgen_malloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.daliaengine_set_lookahead_timeline(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, fps);
+        return ret !== 0;
+    }
+    /**
+     * @param {number} horizon_seconds
+     * @param {number} threshold
+     * @param {number} min_ratio
+     * @returns {boolean}
+     */
+    should_hold_for_sustained_bass(horizon_seconds, threshold, min_ratio) {
+        const ret = wasm.daliaengine_should_hold_for_sustained_bass(this.__wbg_ptr, horizon_seconds, threshold, min_ratio);
+        return ret !== 0;
+    }
+    /**
+     * @param {number} current_time_seconds
+     * @param {number} horizon_seconds
+     * @param {number} threshold
+     * @param {number} min_ratio
+     * @returns {boolean}
+     */
+    should_hold_for_sustained_bass_at(current_time_seconds, horizon_seconds, threshold, min_ratio) {
+        const ret = wasm.daliaengine_should_hold_for_sustained_bass_at(this.__wbg_ptr, current_time_seconds, horizon_seconds, threshold, min_ratio);
+        return ret !== 0;
     }
     toggle_mashup() {
         wasm.daliaengine_toggle_mashup(this.__wbg_ptr);
@@ -225,6 +362,14 @@ const DaliaEngineFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_daliaengine_free(ptr >>> 0, 1));
 
+let cachedFloat32ArrayMemory0 = null;
+function getFloat32ArrayMemory0() {
+    if (cachedFloat32ArrayMemory0 === null || cachedFloat32ArrayMemory0.byteLength === 0) {
+        cachedFloat32ArrayMemory0 = new Float32Array(wasm.memory.buffer);
+    }
+    return cachedFloat32ArrayMemory0;
+}
+
 function getStringFromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return decodeText(ptr, len);
@@ -241,6 +386,13 @@ function getUint8ArrayMemory0() {
 function passArray8ToWasm0(arg, malloc) {
     const ptr = malloc(arg.length * 1, 1) >>> 0;
     getUint8ArrayMemory0().set(arg, ptr / 1);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
+function passArrayF32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getFloat32ArrayMemory0().set(arg, ptr / 4);
     WASM_VECTOR_LEN = arg.length;
     return ptr;
 }
@@ -265,6 +417,7 @@ let wasmModule, wasm;
 function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
+    cachedFloat32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
     return wasm;

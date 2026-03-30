@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { getPresetEnvironment } from './visual/presetEnvironment';
 import { getPresetPsyMotion } from './visual/presetPsyMotion';
 import { CONFIG } from './core/config';
-import { AudioManager } from './audio/AudioManager';
+import { AudioManager, type LookaheadTimeline } from './audio/AudioManager';
 import { UIManager } from './ui/UIManager';
 import { RecordingManager } from './ui/RecordingManager';
 import { setupWebGL, type SceneContext } from './render/SceneSetup';
@@ -49,15 +49,12 @@ let camZoomTarget = 8;
 let energyFast = 0;
 let energySlow = 0;
 let transientPulse = 0;
-let spectralFluxFast = 0;
-let spectralFluxSlow = 0;
 let spectralFluxGate = 0;
 let feedbackWarp = 0;
 let stereoWidthSmooth = 0;
 let stereoBalanceSmooth = 0.5;
 let leftEnergySmooth = 0;
 let rightEnergySmooth = 0;
-let prevSpectrum: Float32Array | null = null;
 let momentaryLoudnessDb = -60;
 let shortTermLoudnessDb = -60;
 let integratedLoudnessDb = -60;
@@ -85,6 +82,7 @@ let showFps = false;
 let fpsSmoothed = 60;
 let lastFrameAtMs = performance.now();
 let presetTransitionEndsAtMs = 0;
+let lookaheadTimelineToken = 0;
 
 const UI_STATE_STORAGE_KEY = 'dalia.ui.settings.v1';
 
@@ -251,6 +249,57 @@ function markPresetTransition(nowMs: number) {
   presetTransitionEndsAtMs = nowMs + CONFIG.MASHUP_TRANSITION_TARGET_MS;
 }
 
+function clearLookaheadTimelineOnEngines() {
+  if (!engine || !leftEngine || !rightEngine) return;
+  engine.clear_lookahead_timeline();
+  leftEngine.clear_lookahead_timeline();
+  rightEngine.clear_lookahead_timeline();
+}
+
+function applyLookaheadTimelineToEngines(timeline: LookaheadTimeline): boolean {
+  if (!timeline || timeline.energy.length === 0) {
+    return false;
+  }
+
+  const appliedMain = engine.set_lookahead_timeline(
+    timeline.energy,
+    timeline.transient,
+    timeline.lowBand,
+    timeline.fps,
+  );
+  const appliedLeft = leftEngine.set_lookahead_timeline(
+    timeline.energy,
+    timeline.transient,
+    timeline.lowBand,
+    timeline.fps,
+  );
+  const appliedRight = rightEngine.set_lookahead_timeline(
+    timeline.energy,
+    timeline.transient,
+    timeline.lowBand,
+    timeline.fps,
+  );
+
+  return appliedMain && appliedLeft && appliedRight;
+}
+
+async function refreshAbsoluteLookaheadTimeline() {
+  if (!CONFIG.RUST_LOOKAHEAD_ENABLED || !CONFIG.RUST_ABSOLUTE_LOOKAHEAD_ENABLED) {
+    clearLookaheadTimelineOnEngines();
+    return;
+  }
+
+  const requestToken = ++lookaheadTimelineToken;
+  const timeline = await audio.buildLookaheadTimeline(ui.audioEl);
+  if (requestToken !== lookaheadTimelineToken) {
+    return;
+  }
+
+  if (!timeline || !applyLookaheadTimelineToEngines(timeline)) {
+    clearLookaheadTimelineOnEngines();
+  }
+}
+
 // ─── Preset Navigation ───────────────────────────────────────────────────────
 function goNextPreset() {
   markPresetTransition(performance.now());
@@ -358,12 +407,21 @@ function maybeMashupDynamic(
   bpmConfidence: number,
   scoreVolatility: number,
   dropLikelihood: number,
+  analysisReadiness: number,
+  bassHoldActive: boolean,
+  futureTransientPeak: number,
 ) {
   const dynamicAutoEnabled = mashupEnabled || (CONFIG.AUTO_PRESET_MUTATION && CONFIG.MASHUP_DYNAMIC_AUTO_WITHOUT_TOGGLE);
   if (!CONFIG.MASHUP_DYNAMIC_MODE || !dynamicAutoEnabled) return;
 
   if (lastAutoPresetAtMs <= 0) {
     lastAutoPresetAtMs = nowMs;
+  }
+
+  if (bassHoldActive && analysisReadiness >= CONFIG.MASHUP_RUST_ANALYSIS_MIN_READINESS) {
+    mashupDynamicArmed = true;
+    dropSyncPending = false;
+    return;
   }
 
   const high = CONFIG.MASHUP_DYNAMIC_SCORE_THRESHOLD;
@@ -378,7 +436,8 @@ function maybeMashupDynamic(
       !dropSyncPending &&
       nowMs - dropSyncLastArmAtMs >= CONFIG.MASHUP_DROP_SYNC_REARM_MS &&
       score >= CONFIG.MASHUP_DROP_SYNC_MIN_SCORE &&
-      dropLikelihood >= CONFIG.MASHUP_DROP_SYNC_MIN_LIKELIHOOD;
+      dropLikelihood >= CONFIG.MASHUP_DROP_SYNC_MIN_LIKELIHOOD &&
+      futureTransientPeak >= 0.42;
 
     if (canArmDrop) {
       dropSyncPending = true;
@@ -414,7 +473,8 @@ function maybeMashupDynamic(
     const hardForce = sinceLast >= CONFIG.MASHUP_DYNAMIC_IDLE_FORCE_MS * 1.8;
     const relaxedTrigger =
       score >= CONFIG.MASHUP_DYNAMIC_IDLE_MIN_SCORE ||
-      pulse >= CONFIG.MASHUP_DYNAMIC_IDLE_MIN_PULSE;
+      pulse >= CONFIG.MASHUP_DYNAMIC_IDLE_MIN_PULSE ||
+      futureTransientPeak >= 0.56;
 
     const relaxedBeatLock =
       !CONFIG.MASHUP_DYNAMIC_BEAT_LOCK ||
@@ -457,6 +517,45 @@ function maybeMashupDynamic(
   dropSyncPending = false;
 }
 
+function syncGeometryFromWasm(geometry: THREE.BufferGeometry, sourceEngine: DaliaEngine) {
+  const ptr = sourceEngine.get_geometry_ptr();
+  const len = sourceEngine.get_geometry_len();
+  const memoryBuffer = wasmModule.memory.buffer;
+
+  const currentAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const currentArray = currentAttr.array;
+  const hasFloat32Array = currentArray instanceof Float32Array;
+
+  if (
+    hasFloat32Array &&
+    currentArray.buffer === memoryBuffer &&
+    currentArray.byteOffset === ptr &&
+    currentArray.length === len
+  ) {
+    currentAttr.needsUpdate = true;
+    return;
+  }
+
+  const nextArray = new Float32Array(memoryBuffer, ptr, len);
+  const hasSameLength = hasFloat32Array && currentArray.length === len;
+
+  if (hasSameLength) {
+    currentAttr.array = nextArray;
+    currentAttr.needsUpdate = true;
+    return;
+  }
+
+  geometry.setAttribute('position', new THREE.BufferAttribute(nextArray, 3));
+  const refreshedAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
+  refreshedAttr.needsUpdate = true;
+}
+
+function syncAllGeometryFromWasm() {
+  syncGeometryFromWasm(sceneCtx.geometry, engine);
+  syncGeometryFromWasm(sceneCtx.leftGeometry, leftEngine);
+  syncGeometryFromWasm(sceneCtx.rightGeometry, rightEngine);
+}
+
 // ─── Render Loop ──────────────────────────────────────────────────────────────
 function renderLoop() {
   requestAnimationFrame(renderLoop);
@@ -487,25 +586,7 @@ function renderLoop() {
 
   const { dataArray, leftDataArray, rightDataArray, audioSampleRate, leftFftSize, rightFftSize } = freqData;
 
-  // 1. Spectral flux onset detector
-  if (!prevSpectrum || prevSpectrum.length !== dataArray.length) {
-    prevSpectrum = new Float32Array(dataArray.length);
-  }
-  let fluxRaw = 0;
-  for (let i = 0; i < dataArray.length; i++) {
-    const mag = dataArray[i] / 255;
-    const delta = mag - prevSpectrum[i];
-    if (delta > 0) fluxRaw += delta;
-    prevSpectrum[i] = mag;
-  }
-  fluxRaw /= dataArray.length;
-  spectralFluxFast += (fluxRaw - spectralFluxFast) * 0.4;
-  spectralFluxSlow += (fluxRaw - spectralFluxSlow) * 0.04;
-  const fluxTransient = Math.max(0, spectralFluxFast - spectralFluxSlow);
-  const fluxTarget = clamp01((fluxTransient - 0.003) / 0.03);
-  spectralFluxGate += (fluxTarget - spectralFluxGate) * 0.24;
-
-  // 2. WASM Process Audio
+  // 1. WASM Process Audio
   // Calculamos la resolución del bin dependiendo de tu AudioContext
   const hzPerBin = audioSampleRate / leftFftSize;
   const hzPerBinRight = audioSampleRate / rightFftSize;
@@ -514,11 +595,9 @@ function renderLoop() {
   leftEngine.process_audio(leftDataArray, hzPerBin);
   rightEngine.process_audio(rightDataArray, hzPerBinRight);
 
-  sceneCtx.geometry.attributes.position.needsUpdate = true;
-  sceneCtx.leftGeometry.attributes.position.needsUpdate = true;
-  sceneCtx.rightGeometry.attributes.position.needsUpdate = true;
+  syncAllGeometryFromWasm();
 
-  // 3. Audio Metrics
+  // 2. Audio Metrics
   const bass = engine.get_bass();
   const mid = engine.get_mid();
   const treb = engine.get_treb();
@@ -526,6 +605,18 @@ function renderLoop() {
   const subBass = engine.get_sub_bass();
   const presence = engine.get_presence();
   const air = engine.get_air();
+
+  const rustFluxGate = engine.get_spectral_flux_gate();
+  spectralFluxGate += (rustFluxGate - spectralFluxGate) * 0.28;
+  const rustTransient = engine.get_transient_strength();
+  const analysisReadiness = engine.get_analysis_readiness();
+  const currentTrackTimeSec = Number.isFinite(ui.audioEl.currentTime)
+    ? Math.max(0, ui.audioEl.currentTime)
+    : 0;
+  const absoluteLookaheadActive =
+    CONFIG.RUST_LOOKAHEAD_ENABLED &&
+    CONFIG.RUST_ABSOLUTE_LOOKAHEAD_ENABLED &&
+    engine.has_lookahead_timeline();
 
   const under150Left = averageBand(leftDataArray, 20, 150, audioSampleRate, leftFftSize);
   const under150Right = averageBand(rightDataArray, 20, 150, audioSampleRate, rightFftSize);
@@ -559,7 +650,8 @@ function renderLoop() {
 
   energyFast += (energy - energyFast) * 0.22;
   energySlow += (energy - energySlow) * 0.035;
-  const transient = Math.max(0, energyFast - energySlow);
+  const transientFromEnergy = Math.max(0, energyFast - energySlow);
+  const transient = Math.max(transientFromEnergy, rustTransient * 0.92);
   transientPulse += (transient * 2.2 + subBass * 0.25 + spectralFluxGate * 0.5 - transientPulse) * 0.18;
   const pulse = Math.min(transientPulse, 1.0);
 
@@ -576,7 +668,51 @@ function renderLoop() {
   const beatPhase = engine.get_beat_phase();
   const beatPulse = Math.max(0, Math.sin(beatPhase * Math.PI * 2));
   const predictedEnergy = engine.get_predicted_energy(CONFIG.MASHUP_PREDICTION_HORIZON_SEC);
-  const macroPredictedEnergy = engine.get_predicted_energy(CONFIG.MASHUP_MACRO_HORIZON_SEC);
+  const macroPredictedEnergyRaw = engine.get_predicted_energy(CONFIG.MASHUP_MACRO_HORIZON_SEC);
+  const futureEnergyMean = CONFIG.RUST_LOOKAHEAD_ENABLED
+    ? (absoluteLookaheadActive
+      ? engine.get_future_energy_mean_at(currentTrackTimeSec, CONFIG.MASHUP_MACRO_HORIZON_SEC)
+      : engine.get_future_energy_mean(CONFIG.MASHUP_MACRO_HORIZON_SEC))
+    : macroPredictedEnergyRaw;
+  const macroPredictedEnergy = clamp01(macroPredictedEnergyRaw * 0.62 + futureEnergyMean * 0.38);
+  const futureTransientPeak = CONFIG.RUST_LOOKAHEAD_ENABLED
+    ? (absoluteLookaheadActive
+      ? engine.get_future_transient_peak_at(currentTrackTimeSec, CONFIG.MASHUP_BASS_SUSTAIN_HORIZON_SEC)
+      : engine.get_future_transient_peak(CONFIG.MASHUP_BASS_SUSTAIN_HORIZON_SEC))
+    : transientNorm;
+  const bassSustainRatio = CONFIG.RUST_LOOKAHEAD_ENABLED
+    ? (absoluteLookaheadActive
+      ? engine.get_future_bass_sustain_ratio_at(
+        currentTrackTimeSec,
+        CONFIG.MASHUP_BASS_SUSTAIN_HORIZON_SEC,
+        CONFIG.MASHUP_BASS_SUSTAIN_THRESHOLD,
+      )
+      : engine.get_future_bass_sustain_ratio(
+        CONFIG.MASHUP_BASS_SUSTAIN_HORIZON_SEC,
+        CONFIG.MASHUP_BASS_SUSTAIN_THRESHOLD,
+      ))
+    : 0;
+  const bassHoldSignal = CONFIG.RUST_LOOKAHEAD_ENABLED
+    ? (absoluteLookaheadActive
+      ? engine.should_hold_for_sustained_bass_at(
+        currentTrackTimeSec,
+        CONFIG.MASHUP_BASS_SUSTAIN_HORIZON_SEC,
+        CONFIG.MASHUP_BASS_SUSTAIN_THRESHOLD,
+        CONFIG.MASHUP_BASS_SUSTAIN_MIN_RATIO,
+      )
+      : engine.should_hold_for_sustained_bass(
+        CONFIG.MASHUP_BASS_SUSTAIN_HORIZON_SEC,
+        CONFIG.MASHUP_BASS_SUSTAIN_THRESHOLD,
+        CONFIG.MASHUP_BASS_SUSTAIN_MIN_RATIO,
+      ))
+    : false;
+  const readinessReady = absoluteLookaheadActive ||
+    analysisReadiness >= CONFIG.MASHUP_RUST_ANALYSIS_MIN_READINESS;
+  const bassHoldActive = CONFIG.RUST_LOOKAHEAD_ENABLED &&
+    CONFIG.MASHUP_BASS_SUSTAIN_LOCK &&
+    readinessReady &&
+    bassSustainRatio >= CONFIG.MASHUP_BASS_SUSTAIN_MIN_RATIO &&
+    bassHoldSignal;
 
   harmonicConfidenceSmooth += (harmonicConfidence - harmonicConfidenceSmooth) * 0.18;
   bpmSmooth += (detectedBpm - bpmSmooth) * 0.1;
@@ -613,12 +749,16 @@ function renderLoop() {
     spectralClarity,
     scoreVolatility,
   });
+  const dynamicScoreWithFuture = Math.max(
+    dynamicMashupScore,
+    clamp01(dynamicMashupScore * 0.82 + futureTransientPeak * 0.18),
+  );
 
-  pushRolling(dynamicScoreHistory, dynamicMashupScore, VOLATILITY_WINDOW_FRAMES);
+  pushRolling(dynamicScoreHistory, dynamicScoreWithFuture, VOLATILITY_WINDOW_FRAMES);
 
   if (CONFIG.MASHUP_DYNAMIC_MODE) {
     maybeMashupDynamic(
-      dynamicMashupScore,
+      dynamicScoreWithFuture,
       nowMs,
       pulse,
       dynamicRangeVisual,
@@ -626,6 +766,9 @@ function renderLoop() {
       bpmConfidenceSmooth,
       scoreVolatility,
       dropLikelihood,
+      analysisReadiness,
+      bassHoldActive,
+      futureTransientPeak,
     );
   } else {
     maybeMutatePreset(dynamicRangeVisual, Math.max(pulse, fluxNorm), nowMs);
@@ -933,10 +1076,24 @@ async function main() {
       if (audio.audioCtx && audio.audioCtx.state === 'suspended') {
         audio.audioCtx.resume();
       }
+      void refreshAbsoluteLookaheadTimeline();
     });
+  });
+
+  ui.audioEl.addEventListener('loadedmetadata', () => {
+    void refreshAbsoluteLookaheadTimeline();
+  });
+  ui.audioEl.addEventListener('emptied', () => {
+    lookaheadTimelineToken += 1;
+    clearLookaheadTimelineOnEngines();
+  });
+  ui.audioEl.addEventListener('error', () => {
+    lookaheadTimelineToken += 1;
+    clearLookaheadTimelineOnEngines();
   });
   
   ui.initTrackPicker(CONFIG.DEFAULT_TRACK_NAME);
+  void refreshAbsoluteLookaheadTimeline();
 
   window.addEventListener('keydown', (event) => {
     const isHardReloadKey = event.ctrlKey && event.shiftKey && (event.key === 'R' || event.key === 'r');

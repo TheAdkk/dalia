@@ -45,8 +45,68 @@ impl DaliaEngine {
     pub fn get_detected_bpm(&self) -> f32 { self.audio_state.detected_bpm() }
     pub fn get_bpm_confidence(&self) -> f32 { self.audio_state.bpm_confidence() }
     pub fn get_beat_phase(&self) -> f32 { self.audio_state.beat_phase() }
+    pub fn set_lookahead_timeline(
+        &mut self,
+        energy_timeline: &[f32],
+        transient_timeline: &[f32],
+        low_band_timeline: &[f32],
+        fps: f32,
+    ) -> bool {
+        self.audio_state.set_lookahead_timeline(
+            energy_timeline,
+            transient_timeline,
+            low_band_timeline,
+            fps,
+        )
+    }
+    pub fn clear_lookahead_timeline(&mut self) { self.audio_state.clear_lookahead_timeline() }
+    pub fn has_lookahead_timeline(&self) -> bool { self.audio_state.has_lookahead_timeline() }
     pub fn get_predicted_energy(&self, horizon_seconds: f32) -> f32 {
         self.audio_state.predicted_energy(horizon_seconds)
+    }
+    pub fn get_spectral_flux_gate(&self) -> f32 { self.audio_state.spectral_flux_gate() }
+    pub fn get_transient_strength(&self) -> f32 { self.audio_state.transient_strength() }
+    pub fn get_analysis_readiness(&self) -> f32 { self.audio_state.analysis_readiness() }
+    pub fn get_low_band_energy(&self) -> f32 { self.audio_state.low_band_energy() }
+    pub fn get_predicted_low_band(&self, horizon_seconds: f32) -> f32 {
+        self.audio_state.predicted_low_band(horizon_seconds)
+    }
+    pub fn get_future_energy_mean(&self, horizon_seconds: f32) -> f32 {
+        self.audio_state.future_energy_mean(horizon_seconds)
+    }
+    pub fn get_future_energy_mean_at(&self, current_time_seconds: f32, horizon_seconds: f32) -> f32 {
+        self.audio_state.future_energy_mean_at(current_time_seconds, horizon_seconds)
+    }
+    pub fn get_future_transient_peak(&self, horizon_seconds: f32) -> f32 {
+        self.audio_state.future_transient_peak(horizon_seconds)
+    }
+    pub fn get_future_transient_peak_at(&self, current_time_seconds: f32, horizon_seconds: f32) -> f32 {
+        self.audio_state.future_transient_peak_at(current_time_seconds, horizon_seconds)
+    }
+    pub fn get_future_bass_sustain_ratio(&self, horizon_seconds: f32, threshold: f32) -> f32 {
+        self.audio_state.future_bass_sustain_ratio(horizon_seconds, threshold)
+    }
+    pub fn get_future_bass_sustain_ratio_at(
+        &self,
+        current_time_seconds: f32,
+        horizon_seconds: f32,
+        threshold: f32,
+    ) -> f32 {
+        self.audio_state
+            .future_bass_sustain_ratio_at(current_time_seconds, horizon_seconds, threshold)
+    }
+    pub fn should_hold_for_sustained_bass(&self, horizon_seconds: f32, threshold: f32, min_ratio: f32) -> bool {
+        self.audio_state.should_hold_for_sustained_bass(horizon_seconds, threshold, min_ratio)
+    }
+    pub fn should_hold_for_sustained_bass_at(
+        &self,
+        current_time_seconds: f32,
+        horizon_seconds: f32,
+        threshold: f32,
+        min_ratio: f32,
+    ) -> bool {
+        self.audio_state
+            .should_hold_for_sustained_bass_at(current_time_seconds, horizon_seconds, threshold, min_ratio)
     }
     pub fn get_buffered_energy_mean(&self) -> f32 { self.audio_state.buffered_energy_mean() }
     

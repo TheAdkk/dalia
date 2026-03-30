@@ -51,9 +51,6 @@ export interface SceneContext {
   waveformMaterial: THREE.LineBasicMaterial;
   waveformLine: THREE.Line;
   waveformPositions: Float32Array;
-  wasmMemoryView: Float32Array;
-  leftWasmMemoryView: Float32Array;
-  rightWasmMemoryView: Float32Array;
 }
 
 function createGlowTexture() {
@@ -354,7 +351,6 @@ export function setupWebGL(
     leftPointsMaterial, rightPointsMaterial, leftPoints, rightPoints, leftAccentMaterial, rightAccentMaterial,
     leftAccentPoints, rightAccentPoints, textureMaterial, texturePoints, noiseMaterial, noisePoints,
     tunnelGeometry, tunnelMaterial, tunnelPoints, tunnelPositions, sparkRingMaterial, sparkRingPoints,
-    waveformGeometry, waveformMaterial, waveformLine, waveformPositions, wasmMemoryView, leftWasmMemoryView,
-    rightWasmMemoryView
+    waveformGeometry, waveformMaterial, waveformLine, waveformPositions
   };
 }
