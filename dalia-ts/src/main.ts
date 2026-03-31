@@ -982,12 +982,13 @@ function renderLoop() {
   sceneCtx.noisePoints.position.x = -warpX * 0.9;
   sceneCtx.noisePoints.position.z = -0.2 + warpY * 2.1 + psy.lookDepth * 0.08;
 
-  // Limitador extremo de Bloom
-  const targetBloom = Math.max(0.1, Math.min(0.5, (0.15 + subBass * 0.1 + energy * 0.08 + pulse * 0.08 + air * 0.02 + dynamicRangeVisual * 0.02 + plrVisual * 0.02 + loudnessDrift * 0.02 + glitchDrive * 0.01 + spectralFluxGate * 0.02 + env.bloomBoost * 0.5 + psy.depthPulse * 0.02) * transitionSoftness));
-  sceneCtx.bloomPass.strength += (targetBloom - sceneCtx.bloomPass.strength) * 0.06;
-  sceneCtx.bloomPass.radius = Math.max(0.05, Math.min(0.22, 0.08 + treb * 0.08 + pulse * 0.04 + plrVisual * 0.02 + glitchDrive * 0.01 + psy.parallax * 0.01));
-  sceneCtx.bloomPass.threshold = Math.max(0.2, Math.min(0.45, 0.3 + (1.0 - energy) * 0.09 - pulse * 0.02 - dynamicRangeVisual * 0.02 - glitchDrive * 0.01 - psy.depthPulse * 0.01));
-  sceneCtx.bloomPass.strength = Math.min(sceneCtx.bloomPass.strength, 0.5);
+  const baseBloom = 0.15 + (env.bloomBoost * 0.5);
+  const reactiveBloom = (subBass * 0.15) + (pulse * 0.12) + (energy * 0.08) + (glitchDrive * 0.05);
+  const targetBloom = Math.max(0.1, Math.min(0.5, (baseBloom + reactiveBloom) * transitionSoftness));
+
+  sceneCtx.bloomPass.strength += (targetBloom - sceneCtx.bloomPass.strength) * 0.08;
+  sceneCtx.bloomPass.radius += (0.15 + (treb * 0.05) - sceneCtx.bloomPass.radius) * 0.05;
+  sceneCtx.bloomPass.threshold = 0.25;
 
   const camShake = Math.min(0.07, (glitchDrive * 0.014 + transient * 0.012 + plrVisual * 0.01 + psy.depthPulse * 0.012) * transitionSoftness);
   const jitterX = (Math.random() - 0.5) * camShake;
@@ -1116,6 +1117,7 @@ async function main() {
     sceneCtx.camera.updateProjectionMatrix();
     sceneCtx.renderer.setSize(window.innerWidth, window.innerHeight);
     sceneCtx.composer.setSize(window.innerWidth, window.innerHeight);
+    sceneCtx.bloomPass.setSize(window.innerWidth / 2, window.innerHeight / 2);
   });
 
   ui.recordBtn.addEventListener('click', () => {

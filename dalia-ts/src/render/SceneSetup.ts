@@ -319,7 +319,7 @@ export function setupWebGL(
 
   const renderScene = new RenderPass(scene, camera);
   const bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2),
     0.42, 0.18, 0.2
   );
 
@@ -334,6 +334,9 @@ export function setupWebGL(
   composer.addPass(afterimagePass);
   composer.addPass(bloomPass);
   composer.addPass(filmPass);
+
+  // Keep Bloom at half resolution to reduce per-frame blur cost.
+  bloomPass.setSize(window.innerWidth / 2, window.innerHeight / 2);
 
   const glitchPass = new GlitchPass();
   glitchPass.enabled = false;
