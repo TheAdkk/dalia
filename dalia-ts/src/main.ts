@@ -552,8 +552,11 @@ function syncGeometryFromWasm(geometry: THREE.BufferGeometry, sourceEngine: Dali
 
 function syncAllGeometryFromWasm() {
   syncGeometryFromWasm(sceneCtx.geometry, engine);
-  syncGeometryFromWasm(sceneCtx.leftGeometry, leftEngine);
-  syncGeometryFromWasm(sceneCtx.rightGeometry, rightEngine);
+
+  if (!CONFIG.SINGLE_CORE_MODE) {
+    syncGeometryFromWasm(sceneCtx.leftGeometry, leftEngine);
+    syncGeometryFromWasm(sceneCtx.rightGeometry, rightEngine);
+  }
 }
 
 // ─── Render Loop ──────────────────────────────────────────────────────────────
@@ -590,10 +593,15 @@ function renderLoop() {
   // Calculamos la resolución del bin dependiendo de tu AudioContext
   const hzPerBin = audioSampleRate / leftFftSize;
   const hzPerBinRight = audioSampleRate / rightFftSize;
-  
-  engine.process_audio(dataArray, hzPerBin);
-  leftEngine.process_audio(leftDataArray, hzPerBin);
-  rightEngine.process_audio(rightDataArray, hzPerBinRight);
+
+  const deltaSec = Math.max(0.001, frameDeltaMs / 1000);
+
+  engine.process_audio(dataArray, hzPerBin, deltaSec);
+
+  if (!CONFIG.SINGLE_CORE_MODE) {
+    leftEngine.process_audio(leftDataArray, hzPerBin, deltaSec);
+    rightEngine.process_audio(rightDataArray, hzPerBinRight, deltaSec);
+  }
 
   syncAllGeometryFromWasm();
 

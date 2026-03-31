@@ -280,11 +280,12 @@ export class DaliaEngine {
     /**
      * @param {Uint8Array} frequency_data
      * @param {number} hz_per_bin
+     * @param {number} delta_time
      */
-    process_audio(frequency_data, hz_per_bin) {
+    process_audio(frequency_data, hz_per_bin, delta_time) {
         const ptr0 = passArray8ToWasm0(frequency_data, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        wasm.daliaengine_process_audio(this.__wbg_ptr, ptr0, len0, hz_per_bin);
+        wasm.daliaengine_process_audio(this.__wbg_ptr, ptr0, len0, hz_per_bin, delta_time);
     }
     /**
      * @param {number} target_idx

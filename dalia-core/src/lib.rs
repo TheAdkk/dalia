@@ -146,10 +146,15 @@ impl DaliaEngine {
         self.next_preset();
     }
 
-    pub fn process_audio(&mut self, frequency_data: &[u8], hz_per_bin: f32) {
-        self.audio_state.process_audio(frequency_data, &mut self.processed_data, hz_per_bin);
+    pub fn process_audio(&mut self, frequency_data: &[u8], hz_per_bin: f32, delta_time: f32) {
+        self.audio_state.process_audio(
+            frequency_data,
+            &mut self.processed_data,
+            hz_per_bin,
+            delta_time,
+        );
 
-        self.time += 0.016;
+        self.time += delta_time;
         self.mashup_controller.update();
 
         // Generate geometry

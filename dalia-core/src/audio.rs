@@ -464,7 +464,13 @@ impl AudioState {
         sustain_ratio >= min_ratio && self.low_band_energy() >= threshold * 0.82
     }
 
-    pub fn process_audio(&mut self, frequency_data: &[u8], processed_data: &mut Vec<f32>, hz_per_bin: f32) {
+    pub fn process_audio(
+        &mut self,
+        frequency_data: &[u8],
+        processed_data: &mut Vec<f32>,
+        hz_per_bin: f32,
+        delta_time: f32,
+    ) {
         let len = frequency_data.len();
         if len == 0 {
             return;
@@ -567,7 +573,7 @@ impl AudioState {
             self.update_harmonic_hue();
         }
 
-        self.elapsed_seconds += 1.0 / ASSUMED_FPS;
+        self.elapsed_seconds += delta_time;
 
         let onset = self.transient_strength();
         let low_band = self.low_band_energy();
@@ -718,6 +724,7 @@ impl AudioState {
 #[cfg(test)]
 mod tests {
     use super::AudioState;
+    use super::ASSUMED_FPS;
 
     fn assert_band_ranges(state: &AudioState) {
         let bands = [
@@ -783,7 +790,7 @@ mod tests {
         let mut state = AudioState::new();
         let mut processed = Vec::new();
 
-        state.process_audio(&[], &mut processed, 43.0);
+        state.process_audio(&[], &mut processed, 43.0, 1.0 / ASSUMED_FPS);
 
         assert!(processed.is_empty());
         assert_eq!(state.energy, 0.0);
@@ -801,7 +808,7 @@ mod tests {
             .map(|i| ((i * 37 + 11) % 255) as u8)
             .collect();
 
-        state.process_audio(&frequency_data, &mut processed, 43.0);
+        state.process_audio(&frequency_data, &mut processed, 43.0, 1.0 / ASSUMED_FPS);
 
         assert_eq!(processed.len(), frequency_data.len());
         assert!(processed.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)));
@@ -811,7 +818,7 @@ mod tests {
         assert!(chroma_sum <= 1.0 + 1e-6);
 
         let silence = vec![0_u8; 1024];
-        state.process_audio(&silence, &mut processed, 43.0);
+        state.process_audio(&silence, &mut processed, 43.0, 1.0 / ASSUMED_FPS);
         assert_band_ranges(&state);
     }
 
@@ -836,7 +843,7 @@ mod tests {
                 }
             }
 
-            state.process_audio(&frequency_data, &mut processed, 43.0);
+            state.process_audio(&frequency_data, &mut processed, 43.0, 1.0 / ASSUMED_FPS);
         }
 
         let bpm = state.detected_bpm();
@@ -857,7 +864,7 @@ mod tests {
             for value in frequency_data.iter_mut().take(120).skip(48) {
                 *value = 180;
             }
-            state.process_audio(&frequency_data, &mut processed, 43.0);
+            state.process_audio(&frequency_data, &mut processed, 43.0, 1.0 / ASSUMED_FPS);
         }
 
         let ratio = state.future_bass_sustain_ratio(2.4, 0.55);

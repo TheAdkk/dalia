@@ -42,7 +42,7 @@ export class DaliaEngine {
     constructor();
     next_preset(): void;
     prev_preset(): void;
-    process_audio(frequency_data: Uint8Array, hz_per_bin: number): void;
+    process_audio(frequency_data: Uint8Array, hz_per_bin: number, delta_time: number): void;
     random_preset(target_idx: number): void;
     set_lookahead_timeline(energy_timeline: Float32Array, transient_timeline: Float32Array, low_band_timeline: Float32Array, fps: number): boolean;
     should_hold_for_sustained_bass(horizon_seconds: number, threshold: number, min_ratio: number): boolean;
@@ -93,7 +93,7 @@ export interface InitOutput {
     readonly daliaengine_new: () => number;
     readonly daliaengine_next_preset: (a: number) => void;
     readonly daliaengine_prev_preset: (a: number) => void;
-    readonly daliaengine_process_audio: (a: number, b: number, c: number, d: number) => void;
+    readonly daliaengine_process_audio: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly daliaengine_random_preset: (a: number, b: number) => void;
     readonly daliaengine_set_lookahead_timeline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => number;
     readonly daliaengine_should_hold_for_sustained_bass: (a: number, b: number, c: number, d: number) => number;

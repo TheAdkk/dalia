@@ -7,6 +7,16 @@ export type LookaheadTimeline = {
   lowBand: Float32Array;
 };
 
+type FrequencySnapshot = {
+  fftSize: number;
+  leftFftSize: number;
+  rightFftSize: number;
+  dataArray: Uint8Array<ArrayBufferLike>;
+  leftDataArray: Uint8Array<ArrayBufferLike>;
+  rightDataArray: Uint8Array<ArrayBufferLike>;
+  audioSampleRate: number;
+};
+
 export class AudioManager {
   public audioCtx: AudioContext | null = null;
   public analyser: AnalyserNode | null = null;
@@ -19,6 +29,15 @@ export class AudioManager {
   public isAudioConnected = false;
   public audioDestination: MediaStreamAudioDestinationNode | null = null;
   private lookaheadCache = new Map<string, Promise<LookaheadTimeline | null>>();
+  private _cachedFrequencies: FrequencySnapshot = {
+    fftSize: 0,
+    leftFftSize: 0,
+    rightFftSize: 0,
+    dataArray: new Uint8Array(0),
+    leftDataArray: new Uint8Array(0),
+    rightDataArray: new Uint8Array(0),
+    audioSampleRate: 44_100,
+  };
 
   public connect(audioEl: HTMLAudioElement, onConnected?: () => void) {
     if (this.isAudioConnected) return;
@@ -60,22 +79,23 @@ export class AudioManager {
     }
   }
 
-  public getFrequencies() {
+  public getFrequencies(): FrequencySnapshot | null {
     if (!this.isAudioConnected || !this.analyser || !this.dataArray || !this.leftDataArray || !this.rightDataArray || !this.leftAnalyser || !this.rightAnalyser) {
       return null;
     }
     this.analyser.getByteFrequencyData(this.dataArray as any);
     this.leftAnalyser.getByteFrequencyData(this.leftDataArray as any);
     this.rightAnalyser.getByteFrequencyData(this.rightDataArray as any);
-    return {
-      fftSize: this.analyser.fftSize,
-      leftFftSize: this.leftAnalyser.fftSize,
-      rightFftSize: this.rightAnalyser.fftSize,
-      dataArray: this.dataArray,
-      leftDataArray: this.leftDataArray,
-      rightDataArray: this.rightDataArray,
-      audioSampleRate: this.audioSampleRate
-    };
+
+    this._cachedFrequencies.fftSize = this.analyser.fftSize;
+    this._cachedFrequencies.leftFftSize = this.leftAnalyser.fftSize;
+    this._cachedFrequencies.rightFftSize = this.rightAnalyser.fftSize;
+    this._cachedFrequencies.dataArray = this.dataArray;
+    this._cachedFrequencies.leftDataArray = this.leftDataArray;
+    this._cachedFrequencies.rightDataArray = this.rightDataArray;
+    this._cachedFrequencies.audioSampleRate = this.audioSampleRate;
+
+    return this._cachedFrequencies;
   }
 
   public async resume() {
@@ -101,6 +121,14 @@ export class AudioManager {
 
     const pending = this.computeLookaheadTimeline(trackSrc);
     this.lookaheadCache.set(trackSrc, pending);
+
+    if (this.lookaheadCache.size > 3) {
+      const firstKey = this.lookaheadCache.keys().next().value;
+      if (firstKey !== undefined) {
+        this.lookaheadCache.delete(firstKey);
+      }
+    }
+
     return pending;
   }
 
