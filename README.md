@@ -1,97 +1,148 @@
-# Dalia
+# 🌸 Dalia
 
-Dalia is an audio reactive visualization engine inspired by classic visualizers and modern open source projects.
+**Real-time audio-reactive visualization engine powered by Rust/WASM and Three.js.**
 
-## Vision
+Dalia turns music into immersive 3D visuals — driven by math, shaders, and real-time audio analysis. No physics simulations, no baked animations. Every frame is computed from the music.
 
-Dalia is not a particle physics engine. It is a math and shader based visualization engine focused on:
+<!-- TODO: Add live demo link after Vercel deploy -->
+<!-- [**▶ Try the Live Demo**](https://dalia.vercel.app) -->
 
-- Readable music reaction from low to high bands.
-- Stable visual quality without overexposure.
-- Extensible presets and rendering pipeline.
-- Reproducible behavior for open source collaboration.
+---
 
-## Main inspirations
+## ✨ Features
 
-- projectM: https://github.com/projectM-visualizer/projectm
-- Butterchurn: https://github.com/jberg/butterchurn
+- **20 procedural geometry presets** — from Vector Spheres to Black Hole Singularities, each generated in real-time by mathematical equations
+- **Rust/WASM audio analysis** — FFT-based feature extraction with 7-band energy tracking, chromagram, BPM detection, beat phase, spectral flux gating, and transient detection
+- **Harmonic color system** — colors derived from real-time chromagram analysis, mapping detected musical key to HSL palettes
+- **Dynamic mashup system** — beat-locked preset switching with drop prediction, bass sustain analysis, and lookahead energy forecasting
+- **Post-processing pipeline** — bloom, chromatic aberration, and glitch effects all reactive to audio dynamics
+- **Stereo-aware rendering** — left/right channel separation with independent energy tracking and spatial visualization
+- **Wormhole mode** — cinematic camera with tunnel particles, fog dynamics, and depth-reactive motion
+- **Load your own music** — drag any audio file and watch Dalia react
 
-## Repository structure
+## 🏗️ Architecture
 
-- dalia-core: Rust and WASM core engine.
-- dalia-ts: TypeScript demo app and visual playground.
+```
+dalia/
+├── dalia-core/          ← Rust/WASM engine
+│   └── src/
+│       ├── audio.rs     ← FFT, chromagram, BPM, beat phase, spectral flux, lookahead
+│       ├── geometry.rs  ← 20 procedural geometry generators (math-driven vertices)
+│       ├── presets.rs   ← Preset enum and navigation
+│       ├── mashup.rs    ← Transition controller with smoothstep blending
+│       └── lib.rs       ← DaliaEngine: WASM-exported API surface
+│
+└── dalia-ts/            ← TypeScript demo / visual playground
+    └── src/
+        ├── main.ts      ← Render loop and audio-visual orchestration
+        ├── audio/       ← Web Audio API manager with stereo splitting
+        ├── render/      ← Three.js scene setup, materials, post-processing
+        ├── visual/      ← Preset environments, psy-motion, glitch controller, rhythm dynamics
+        ├── ui/          ← Player controls, preset picker, recording
+        ├── core/        ← Configuration constants
+        └── wasm/        ← Pre-compiled WASM artifacts
+```
 
-## Architecture
+### Signal Flow
 
-1. Audio analysis
-   - FFT based features and per-band energy tracking.
-2. Preset system
-   - Real time equations for warp, transform, motion, and color behavior.
-3. Rendering pipeline
-   - Feedback and layered composition using web graphics APIs.
-4. Future offline rendering
-   - Export path for deterministic video output.
+```
+Microphone/File → Web Audio API → FFT → dalia-core (WASM)
+                                            ├── Band energy (sub-bass → air)
+                                            ├── Chromagram → harmonic hue
+                                            ├── BPM detection → beat phase
+                                            ├── Spectral flux → transient gate
+                                            ├── Lookahead prediction
+                                            └── Geometry vertices
+                                                    ↓
+                                         Three.js render pipeline
+                                            ├── Point cloud rendering
+                                            ├── Stereo L/R separation
+                                            ├── Tunnel particles
+                                            ├── Bloom + Glitch + RGB Shift
+                                            └── Wormhole camera
+```
 
-## Open source scope
+## 🎨 Presets
 
-Primary public product:
+| # | Preset | # | Preset |
+|---|--------|---|--------|
+| 0 | Vector Sphere | 10 | Voxel Grid |
+| 1 | Mutant Torus | 11 | Morphing Cube |
+| 2 | Lissajous Knot | 12 | Heart Pulse |
+| 3 | Plasma Field | 13 | Black Hole Singularity |
+| 4 | Fractal Spiral | 14 | Tesseract Fold |
+| 5 | Hyperbolic Paraboloid | 15 | Hyperspace Jump |
+| 6 | Nebula Vortex | 16 | Wormhole Bridge |
+| 7 | Chaos Ribbon | 17 | Supernova Remnant |
+| 8 | Quantum String | 18 | Andromeda Spiral |
+| 9 | Galactic Web | 19 | Gamma-Ray Pulsar |
 
-- dalia-core as the official reusable engine.
+Presets switch automatically via the dynamic mashup system — beat-locked, drop-synced, and bass-aware.
 
-Secondary support:
+## 🛠️ Tech Stack
 
-- dalia-ts as an optional demo/reference app.
+| Layer | Technology |
+|-------|-----------|
+| Audio DSP | Rust → WebAssembly (`wasm-bindgen`) |
+| 3D Rendering | Three.js with custom post-processing |
+| Build | Vite + TypeScript |
+| WASM Tooling | `wasm-pack` (build locally, artifacts committed) |
 
-This keeps the core focused while still giving contributors a practical visual testbed.
+## 🚀 Getting Started
 
-## Git workflow
+### Prerequisites
 
-- main: stable production branch.
-- dev: active integration branch.
-- feature/*: short lived branches for isolated work.
+- [Node.js](https://nodejs.org/) ≥ 18
+- [Rust](https://rustup.rs/) + `wasm-pack` (only needed if modifying `dalia-core`)
 
-## Contribution direction
+### Run the demo
 
-- Keep rendering behavior deterministic where possible.
-- Avoid uncontrolled brightness spikes.
-- Prefer small focused pull requests.
-- Add tests for critical signal and preset behavior.
-# Dalia Engine
+```bash
+cd dalia-ts
+npm install
+npm run dev
+```
 
-Dalia es un motor de visualizacion audio-reactiva enfocado en evaluacion matematica y shaders.
+Open `http://localhost:5173`, click play, and enjoy.
 
-## Alcance Open Source
+### Modify the Rust core
 
-- Componente principal: `dalia-core` (Rust + WASM).
-- Componente opcional: `dalia-ts` como demo de referencia para integracion y pruebas visuales.
+```bash
+# Install wasm-pack if you haven't
+cargo install wasm-pack
 
-## Inspiraciones
+# Rebuild WASM and start dev server
+cd dalia-ts
+npm run build      # compiles Rust → WASM → bundles everything
+npm run dev
+```
 
-- projectM: https://github.com/projectM-visualizer/projectm
-- Butterchurn: https://github.com/jberg/butterchurn
+### Production build (for deployment)
 
-## Vision Tecnica
+```bash
+cd dalia-ts
+npm run build:deploy   # skips Rust compilation, uses pre-built WASM
+```
 
-1. Analisis de audio por FFT y bandas para controlar dinamicas visuales.
-2. Sistema de presets con evaluacion por frame para warp, rotacion, zoom y composicion.
-3. Pipeline con feedback loop para producir movimiento continuo y coherente con la musica.
+## 🎯 Inspirations
 
-## Arquitectura
+Dalia draws from the legacy of classic music visualizers:
 
-- `dalia-core/`: procesamiento de senal, logica de presets y exportaciones WASM.
-- `dalia-ts/`: app/demo en TypeScript (UI, escena, orquestacion de audio y render).
+- [projectM](https://github.com/projectM-visualizer/projectm) — the open-source Milkdrop reimplementation
+- [Butterchurn](https://github.com/jberg/butterchurn) — Milkdrop in WebGL
 
-## Flujo de Ramas
+## 📄 License
 
-- `main`: rama estable.
-- `dev`: integracion activa.
-- `feature/*`: cambios puntuales por funcionalidad.
+GPL-3.0 License
 
-## Contribucion
+## 🤝 Contributing
 
-Se aceptan contribuciones para:
+Contributions welcome for:
 
-- mejoras de analisis musical,
-- nuevos presets y capas visuales,
-- optimizacion de rendimiento,
-- pruebas de regresion visual y estabilidad.
+- New geometry presets
+- Audio analysis improvements
+- Performance optimizations
+- Visual regression tests
+- Documentation
+
+Please keep PRs focused and small. See the architecture section to understand where your change fits.
