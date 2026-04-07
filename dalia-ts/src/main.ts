@@ -1121,7 +1121,11 @@ async function main() {
   });
 
   ui.recordBtn.addEventListener('click', () => {
-    recorder.toggleRecording(ui.canvas, audio.audioDestination, ui.recordBtn);
+    recorder.toggleQuickRecording(
+      ui.canvas,
+      audio.audioDestination,
+      ui.recordBtn,
+    );
   });
 
   ui.insertPresetControls(goPrevPreset, goNextPreset, {
