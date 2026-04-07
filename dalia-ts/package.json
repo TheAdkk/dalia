@@ -6,6 +6,7 @@
     "dev": "vite",
     "build:wasm": "cd ../dalia-core && wasm-pack build --target web && cd ../dalia-ts && node -e \"const fs=require('fs'); ['dalia_core.js','dalia_core.d.ts','dalia_core_bg.wasm'].forEach(f=>fs.copyFileSync('../dalia-core/pkg/'+f,'src/wasm/'+f))\"",
     "build": "npm run build:wasm && tsc && vite build",
+    "build:deploy": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"

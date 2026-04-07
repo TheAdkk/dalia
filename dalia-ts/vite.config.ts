@@ -7,4 +7,9 @@ export default defineConfig({
     wasm(),
     topLevelAwait(),
   ],
+  build: {
+    sourcemap: false,
+    target: 'esnext',
+    assetsInlineLimit: 0,
+  },
 });
