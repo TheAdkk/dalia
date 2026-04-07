@@ -276,22 +276,46 @@ export class UIManager {
     panel.style.top = '8px';
     document.body.appendChild(panel);
 
+    // ─── Header ───
+    const header = document.createElement('div');
+    header.className = 'settings-header';
+    const headerDot = document.createElement('div');
+    headerDot.className = 'settings-header-icon';
     const title = document.createElement('div');
     title.className = 'settings-title';
     title.textContent = 'Visual Settings';
+    header.append(headerDot, title);
+
+    // ─── Body ───
+    const body = document.createElement('div');
+    body.className = 'settings-body';
+
+    // ─── Section: Playback ───
+    const sectionPlayback = document.createElement('div');
+    sectionPlayback.className = 'settings-section';
 
     const mashupRow = document.createElement('label');
     mashupRow.className = 'settings-row';
-    const mashupText = document.createElement('span');
-    mashupText.textContent = 'Mashup mode';
+    const mashupLabelWrap = document.createElement('div');
+    mashupLabelWrap.className = 'settings-row-label';
+    mashupLabelWrap.textContent = 'Mashup mode';
+    const mashupToggleWrap = document.createElement('div');
+    mashupToggleWrap.className = 'settings-toggle';
     const mashupToggle = document.createElement('input');
     mashupToggle.type = 'checkbox';
     mashupToggle.checked = options.mashupEnabled;
     mashupToggle.addEventListener('change', () => {
       options.onToggleMashup(mashupToggle.checked);
     });
-    mashupRow.append(mashupText, mashupToggle);
+    const mashupTrack = document.createElement('span');
+    mashupTrack.className = 'settings-toggle-track';
+    mashupToggleWrap.append(mashupToggle, mashupTrack);
+    mashupRow.append(mashupLabelWrap, mashupToggleWrap);
     this.mashupToggleRef = mashupToggle;
+
+    // ─── Section: Preset ───
+    const sectionPreset = document.createElement('div');
+    sectionPreset.className = 'settings-section';
 
     const presetRow = document.createElement('label');
     presetRow.className = 'settings-stack';
@@ -321,10 +345,17 @@ export class UIManager {
       closePanel();
     });
 
+    // ─── Section: Display ───
+    const sectionDisplay = document.createElement('div');
+    sectionDisplay.className = 'settings-section';
+
     const fpsRow = document.createElement('label');
     fpsRow.className = 'settings-row';
-    const fpsText = document.createElement('span');
-    fpsText.textContent = 'Show FPS';
+    const fpsLabelWrap = document.createElement('div');
+    fpsLabelWrap.className = 'settings-row-label';
+    fpsLabelWrap.textContent = 'Show FPS';
+    const fpsToggleWrap = document.createElement('div');
+    fpsToggleWrap.className = 'settings-toggle';
     const fpsToggle = document.createElement('input');
     fpsToggle.type = 'checkbox';
     fpsToggle.checked = options.fpsEnabled;
@@ -332,8 +363,18 @@ export class UIManager {
       options.onToggleFps(fpsToggle.checked);
       this.setFpsEnabled(fpsToggle.checked);
     });
-    fpsRow.append(fpsText, fpsToggle);
+    const fpsTrack = document.createElement('span');
+    fpsTrack.className = 'settings-toggle-track';
+    fpsToggleWrap.append(fpsToggle, fpsTrack);
+    fpsRow.append(fpsLabelWrap, fpsToggleWrap);
     this.fpsToggleRef = fpsToggle;
+
+    // Assemble
+    sectionPlayback.append(mashupRow);
+    sectionPreset.append(presetRow, applyPresetBtn);
+    sectionDisplay.append(fpsRow);
+    body.append(sectionPlayback, sectionPreset, sectionDisplay);
+    panel.append(header, body);
 
     const repositionPanel = () => {
       if (panel.hidden) return;
@@ -350,8 +391,6 @@ export class UIManager {
       panel.style.left = `${left}px`;
       panel.style.top = `${top}px`;
     };
-
-    panel.append(title, mashupRow, presetRow, applyPresetBtn, fpsRow);
 
     const closePanel = () => {
       panel.hidden = true;
