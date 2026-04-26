@@ -4,6 +4,8 @@
 
 Dalia turns music into immersive 3D visuals — driven by math, shaders, and real-time audio analysis. No physics simulations, no baked animations. Every frame is computed from the music.
 
+![Dalia demo](demo.gif)
+
 [**▶ Try the Live Demo**](https://dalia-phi.vercel.app)
 
 ---
