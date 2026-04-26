@@ -3,6 +3,7 @@ import { PLAY_ICON, PAUSE_ICON, NEXT_ICON, PREV_ICON, GEAR_ICON } from './icons'
 type SettingsMenuOptions = {
   presetNames: readonly string[];
   mashupEnabled: boolean;
+  mashupAutoRunsWithoutToggle: boolean;
   fpsEnabled: boolean;
   onToggleMashup: (enabled: boolean) => void;
   onApplyPreset: (presetIdx: number) => void;
@@ -298,7 +299,15 @@ export class UIManager {
     mashupRow.className = 'settings-row';
     const mashupLabelWrap = document.createElement('div');
     mashupLabelWrap.className = 'settings-row-label';
-    mashupLabelWrap.textContent = 'Mashup mode';
+    const mashupLabel = document.createElement('div');
+    mashupLabel.textContent = 'Mashup mode';
+    mashupLabelWrap.appendChild(mashupLabel);
+    if (options.mashupAutoRunsWithoutToggle) {
+      const mashupSub = document.createElement('div');
+      mashupSub.className = 'settings-row-sub';
+      mashupSub.textContent = 'Dynamic auto-switching stays active even when this toggle is off.';
+      mashupLabelWrap.appendChild(mashupSub);
+    }
     const mashupToggleWrap = document.createElement('div');
     mashupToggleWrap.className = 'settings-toggle';
     const mashupToggle = document.createElement('input');

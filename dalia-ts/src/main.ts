@@ -1131,6 +1131,10 @@ async function main() {
   ui.insertPresetControls(goPrevPreset, goNextPreset, {
     presetNames: CONFIG.PRESET_NAMES,
     mashupEnabled,
+    mashupAutoRunsWithoutToggle:
+      CONFIG.MASHUP_DYNAMIC_MODE &&
+      CONFIG.AUTO_PRESET_MUTATION &&
+      CONFIG.MASHUP_DYNAMIC_AUTO_WITHOUT_TOGGLE,
     fpsEnabled: showFps,
     onToggleMashup: setMashupMode,
     onApplyPreset: setPresetByIndex,
