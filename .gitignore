@@ -16,3 +16,6 @@ Thumbs.db
 
 # Vercel
 .vercel
+
+# Claude Code
+.claude
