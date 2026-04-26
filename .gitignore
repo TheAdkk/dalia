@@ -13,3 +13,6 @@ dalia-core/pkg/
 # OS
 .DS_Store
 Thumbs.db
+
+# Vercel
+.vercel
