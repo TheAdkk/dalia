@@ -4,14 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <title>Dalia — Audio Visualizer</title>
-    <meta name="description" content="Dalia: Real-time audio visualization engine powered by Rust/WASM" />
+
+    <!-- Primary -->
+    <title>Dalia — Real-Time Audio Visualizer | Rust/WASM + Three.js</title>
+    <meta name="description" content="Dalia turns music into immersive 3D visuals in real time. FFT analysis, BPM detection, and 20 procedural geometries — powered by Rust/WebAssembly and Three.js. Open source." />
+    <meta name="keywords" content="audio visualizer, music visualizer, WebAssembly, Rust, WASM, Three.js, FFT, real-time, open source, procedural geometry, BPM detection" />
+    <meta name="author" content="TheAdkk" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://dalia-phi.vercel.app" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://dalia-phi.vercel.app" />
+    <meta property="og:title" content="Dalia — Real-Time Audio Visualizer | Rust/WASM + Three.js" />
+    <meta property="og:description" content="Turns music into immersive 3D visuals in real time. FFT, BPM detection, 20 procedural geometries. Powered by Rust/WebAssembly and Three.js." />
+    <meta property="og:site_name" content="Dalia" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Dalia — Real-Time Audio Visualizer | Rust/WASM + Three.js" />
+    <meta name="twitter:description" content="Turns music into immersive 3D visuals in real time. FFT, BPM detection, 20 procedural geometries. Powered by Rust/WebAssembly and Three.js." />
+
+    <!-- Theme -->
+    <meta name="theme-color" content="#0a0a0a" />
   </head>
   <body>
     <div id="app">
-      <audio id="audio-player" crossorigin="anonymous" style="display: none;">
-        <source src="/test_music.opus" type="audio/ogg" />
-      </audio>
+      <audio id="audio-player" crossorigin="anonymous" style="display: none;"></audio>
 
       <!-- Fullscreen visualizer -->
       <canvas id="visualizer"></canvas>

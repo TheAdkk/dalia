@@ -62,5 +62,5 @@ export const CONFIG = {
   MASHUP_DROP_SYNC_MIN_LIKELIHOOD: 0.64,
   MASHUP_DROP_SYNC_MIN_SCORE: 0.48,
   MASHUP_DROP_SYNC_REARM_MS: 1_400,
-  DEFAULT_TRACK_NAME: 'test_music.opus',
+  DEFAULT_TRACK_NAME: 'No track loaded — drag a file or click FILE',
 };
