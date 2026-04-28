@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Gradiente cálido que evoca energía y visualización de audio -->
+    <linearGradient id="petal-grad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#ff006e" />
+      <stop offset="50%" stop-color="#8338ec" />
+      <stop offset="100%" stop-color="#3a86ff" />
+    </linearGradient>
+    <linearGradient id="petal-grad-inner" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#fb5607" />
+      <stop offset="100%" stop-color="#ffbe0b" />
+    </linearGradient>
+    <radialGradient id="core-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="40%" stop-color="#ffbe0b" />
+      <stop offset="100%" stop-color="#ff006e" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <!-- Fondo oscuro para contraste (opcional, puede quitarse si se necesita transparente) -->
+  <circle cx="256" cy="256" r="240" fill="#0a0a0a" />
+
+  <!-- Corona externa: 8 pétalos que evocan ondas del espectro -->
+  <g transform="translate(256, 256)">
+    <g opacity="0.9">
+      <path d="M0,-70 Q18,-160 0,-220 Q-18,-160 0,-70 Z" fill="url(#petal-grad)" transform="rotate(0)"/>
+      <path d="M0,-70 Q18,-160 0,-220 Q-18,-160 0,-70 Z" fill="url(#petal-grad)" transform="rotate(45)"/>
+      <path d="M0,-70 Q18,-160 0,-220 Q-18,-160 0,-70 Z" fill="url(#petal-grad)" transform="rotate(90)"/>
+      <path d="M0,-70 Q18,-160 0,-220 Q-18,-160 0,-70 Z" fill="url(#petal-grad)" transform="rotate(135)"/>
+      <path d="M0,-70 Q18,-160 0,-220 Q-18,-160 0,-70 Z" fill="url(#petal-grad)" transform="rotate(180)"/>
+      <path d="M0,-70 Q18,-160 0,-220 Q-18,-160 0,-70 Z" fill="url(#petal-grad)" transform="rotate(225)"/>
+      <path d="M0,-70 Q18,-160 0,-220 Q-18,-160 0,-70 Z" fill="url(#petal-grad)" transform="rotate(270)"/>
+      <path d="M0,-70 Q18,-160 0,-220 Q-18,-160 0,-70 Z" fill="url(#petal-grad)" transform="rotate(315)"/>
+    </g>
+
+    <!-- Corona intermedia: 8 pétalos más cortos, intercalados -->
+    <g opacity="0.85">
+      <path d="M0,-50 Q14,-115 0,-155 Q-14,-115 0,-50 Z" fill="url(#petal-grad-inner)" transform="rotate(22.5)"/>
+      <path d="M0,-50 Q14,-115 0,-155 Q-14,-115 0,-50 Z" fill="url(#petal-grad-inner)" transform="rotate(67.5)"/>
+      <path d="M0,-50 Q14,-115 0,-155 Q-14,-115 0,-50 Z" fill="url(#petal-grad-inner)" transform="rotate(112.5)"/>
+      <path d="M0,-50 Q14,-115 0,-155 Q-14,-115 0,-50 Z" fill="url(#petal-grad-inner)" transform="rotate(157.5)"/>
+      <path d="M0,-50 Q14,-115 0,-155 Q-14,-115 0,-50 Z" fill="url(#petal-grad-inner)" transform="rotate(202.5)"/>
+      <path d="M0,-50 Q14,-115 0,-155 Q-14,-115 0,-50 Z" fill="url(#petal-grad-inner)" transform="rotate(247.5)"/>
+      <path d="M0,-50 Q14,-115 0,-155 Q-14,-115 0,-50 Z" fill="url(#petal-grad-inner)" transform="rotate(292.5)"/>
+      <path d="M0,-50 Q14,-115 0,-155 Q-14,-115 0,-50 Z" fill="url(#petal-grad-inner)" transform="rotate(337.5)"/>
+    </g>
+
+    <!-- Núcleo: círculos concéntricos que evocan ondas de audio / pistilo -->
+    <circle cx="0" cy="0" r="55" fill="url(#core-glow)" opacity="0.6"/>
+    <circle cx="0" cy="0" r="42" fill="none" stroke="#ffbe0b" stroke-width="3" opacity="0.9"/>
+    <circle cx="0" cy="0" r="32" fill="none" stroke="#ff006e" stroke-width="4" opacity="0.8"/>
+    
+    <!-- Forma de onda en el centro (ecualizador/FFT) -->
+    <g transform="translate(0, 0)">
+      <rect x="-20" y="-4" width="8" height="8" rx="2" fill="#ffffff" opacity="0.9"/>
+      <rect x="-8" y="-10" width="8" height="20" rx="2" fill="#ffffff" opacity="0.9"/>
+      <rect x="4" y="-6" width="8" height="12" rx="2" fill="#ffffff" opacity="0.9"/>
+      <rect x="16" y="-2" width="8" height="4" rx="2" fill="#ffffff" opacity="0.9"/>
+    </g>
+  </g>
+
+  <!-- Anillo sutil exterior que refuerza la forma circular del ícono -->
+  <circle cx="256" cy="256" r="236" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.08"/>
+</svg>
