@@ -32,6 +32,10 @@ export class UIManager {
   public fpsOverlayRef: HTMLDivElement | null = null;
   private fpsEnabled = false;
   private fpsLastPaintAt = 0;
+  private safetyWarningPromise: Promise<void> | null = null;
+  private safetyWarningResolve: (() => void) | null = null;
+  private safetyWarningKeydownHandler: ((event: KeyboardEvent) => void) | null = null;
+  private safetyWarningAcceptBtnRef: HTMLButtonElement | null = null;
 
   private resetTimelineUi() {
     this.progressBar.value = '0';
@@ -87,11 +91,18 @@ export class UIManager {
   }
 
   public updateMashupIcon(mashupEnabled: boolean) {
+    const mashupVisuallyEnabled = this.mashupToggleRef?.disabled ? true : mashupEnabled;
     if (this.settingsBtnRef) {
-      this.settingsBtnRef.classList.toggle('active', mashupEnabled);
-      this.settingsBtnRef.title = mashupEnabled ? 'Settings - Mashup ON' : 'Settings';
+      this.settingsBtnRef.classList.toggle('active', mashupVisuallyEnabled);
+      this.settingsBtnRef.title = mashupVisuallyEnabled
+        ? (this.mashupToggleRef?.disabled ? 'Settings - Auto switching ON' : 'Settings - Mashup ON')
+        : 'Settings';
     }
-    if (this.mashupToggleRef && this.mashupToggleRef.checked !== mashupEnabled) {
+    if (
+      this.mashupToggleRef &&
+      !this.mashupToggleRef.disabled &&
+      this.mashupToggleRef.checked !== mashupEnabled
+    ) {
       this.mashupToggleRef.checked = mashupEnabled;
     }
   }
@@ -124,6 +135,150 @@ export class UIManager {
 
     const overlay = this.ensureFpsOverlay();
     overlay.textContent = `FPS ${fps.toFixed(1)}`;
+  }
+
+  public showSafetyWarning(): Promise<void> {
+    if (this.safetyWarningPromise) {
+      return this.safetyWarningPromise;
+    }
+
+    this.safetyWarningPromise = new Promise<void>((resolve) => {
+      this.safetyWarningResolve = resolve;
+
+      const strings = {
+        es: {
+          badge: 'Aviso',
+          title: 'Destellos, movimiento y fotosensibilidad',
+          body: 'Esta experiencia contiene destellos, cambios bruscos de color y movimiento rápido. Si eres sensible a luces intermitentes o tienes epilepsia fotosensible, no continúes sin asegurarte antes de que es seguro para ti.',
+          note: 'Pulsa el botón para continuar.',
+          accept: 'Aceptar y continuar',
+        },
+        en: {
+          badge: 'Warning',
+          title: 'Flashes, motion, and photosensitivity',
+          body: 'This experience contains flashes, abrupt color changes, and rapid motion. If you are sensitive to flashing lights or have photosensitive epilepsy, do not continue unless you know it is safe for you.',
+          note: 'Press the button to continue.',
+          accept: 'Accept and continue',
+        },
+      };
+
+      let lang: 'es' | 'en' = 'es';
+
+      const overlay = document.createElement('div');
+      overlay.className = 'safety-warning-overlay';
+
+      const modal = document.createElement('section');
+      modal.className = 'safety-warning-modal';
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-labelledby', 'safety-warning-title');
+      modal.setAttribute('aria-describedby', 'safety-warning-copy');
+
+      // header row: badge + lang toggle
+      const header = document.createElement('div');
+      header.className = 'safety-warning-header';
+
+      const badge = document.createElement('div');
+      badge.className = 'safety-warning-badge';
+
+      const langToggle = document.createElement('button');
+      langToggle.type = 'button';
+      langToggle.className = 'safety-warning-lang-toggle';
+
+      const title = document.createElement('h1');
+      title.id = 'safety-warning-title';
+      title.className = 'safety-warning-title';
+
+      const copy = document.createElement('div');
+      copy.id = 'safety-warning-copy';
+      copy.className = 'safety-warning-copy';
+
+      const bodyP = document.createElement('p');
+      copy.append(bodyP);
+
+      const note = document.createElement('p');
+      note.className = 'safety-warning-note';
+
+      const actions = document.createElement('div');
+      actions.className = 'safety-warning-actions';
+
+      const acceptBtn = document.createElement('button');
+      acceptBtn.type = 'button';
+      acceptBtn.className = 'safety-warning-accept-btn';
+
+      const focusableElements = [langToggle, acceptBtn];
+
+      const applyLang = () => {
+        const t = strings[lang];
+        badge.textContent = t.badge;
+        langToggle.textContent = lang === 'es' ? 'EN' : 'ES';
+        langToggle.setAttribute('aria-label', lang === 'es' ? 'Switch to English' : 'Cambiar a español');
+        title.textContent = t.title;
+        bodyP.textContent = t.body;
+        note.textContent = t.note;
+        acceptBtn.textContent = t.accept;
+      };
+
+      langToggle.addEventListener('click', () => {
+        lang = lang === 'es' ? 'en' : 'es';
+        applyLang();
+      });
+
+      applyLang();
+
+      const closeWarning = () => {
+        if (this.safetyWarningKeydownHandler) {
+          document.removeEventListener('keydown', this.safetyWarningKeydownHandler, true);
+          this.safetyWarningKeydownHandler = null;
+        }
+
+        this.safetyWarningAcceptBtnRef = null;
+        overlay.remove();
+        const resolve = this.safetyWarningResolve;
+        this.safetyWarningResolve = null;
+        this.safetyWarningPromise = null;
+        resolve?.();
+      };
+
+      acceptBtn.addEventListener('click', closeWarning);
+      overlay.append(modal);
+      header.append(badge, langToggle);
+      modal.append(header, title, copy, note, actions);
+      actions.append(acceptBtn);
+      document.body.appendChild(overlay);
+
+      this.safetyWarningAcceptBtnRef = acceptBtn;
+
+      this.safetyWarningKeydownHandler = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          this.safetyWarningAcceptBtnRef?.focus({ preventScroll: true });
+          return;
+        }
+
+        if (event.key !== 'Tab') {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const currentIdx = focusableElements.findIndex((element) => element === document.activeElement);
+        const nextIdx = currentIdx === -1
+          ? 0
+          : (currentIdx + (event.shiftKey ? -1 : 1) + focusableElements.length) % focusableElements.length;
+
+        focusableElements[nextIdx]?.focus({ preventScroll: true });
+      };
+
+      document.addEventListener('keydown', this.safetyWarningKeydownHandler, true);
+      window.setTimeout(() => {
+        this.safetyWarningAcceptBtnRef?.focus({ preventScroll: true });
+      }, 0);
+    });
+
+    return this.safetyWarningPromise;
   }
 
   public initPlayer(onPlay: () => void) {
@@ -300,19 +455,22 @@ export class UIManager {
     const mashupLabelWrap = document.createElement('div');
     mashupLabelWrap.className = 'settings-row-label';
     const mashupLabel = document.createElement('div');
-    mashupLabel.textContent = 'Mashup mode';
+    mashupLabel.textContent = options.mashupAutoRunsWithoutToggle
+      ? 'Auto switching'
+      : 'Mashup mode';
     mashupLabelWrap.appendChild(mashupLabel);
     if (options.mashupAutoRunsWithoutToggle) {
       const mashupSub = document.createElement('div');
       mashupSub.className = 'settings-row-sub';
-      mashupSub.textContent = 'Dynamic auto-switching stays active even when this toggle is off.';
+      mashupSub.textContent = 'Active by default in dynamic mode.';
       mashupLabelWrap.appendChild(mashupSub);
     }
     const mashupToggleWrap = document.createElement('div');
     mashupToggleWrap.className = 'settings-toggle';
     const mashupToggle = document.createElement('input');
     mashupToggle.type = 'checkbox';
-    mashupToggle.checked = options.mashupEnabled;
+    mashupToggle.checked = options.mashupAutoRunsWithoutToggle || options.mashupEnabled;
+    mashupToggle.disabled = options.mashupAutoRunsWithoutToggle;
     mashupToggle.addEventListener('change', () => {
       options.onToggleMashup(mashupToggle.checked);
     });

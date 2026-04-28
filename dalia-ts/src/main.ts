@@ -8,6 +8,7 @@ import { CONFIG } from './core/config';
 import { AudioManager, type LookaheadTimeline } from './audio/AudioManager';
 import { UIManager } from './ui/UIManager';
 import { RecordingManager } from './ui/RecordingManager';
+import { needsSafetyConsent, persistSafetyConsent } from './ui/safetyConsent';
 import { setupWebGL, type SceneContext } from './render/SceneSetup';
 import {
   clamp01 as clampDynamics,
@@ -1073,6 +1074,11 @@ function renderLoop() {
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 async function main() {
+  if (needsSafetyConsent()) {
+    await ui.showSafetyWarning();
+    persistSafetyConsent();
+  }
+
   wasmModule = await init();
   engine = new DaliaEngine();
   leftEngine = new DaliaEngine();
