@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust-tests:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dalia-core
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run cargo test
+        run: cargo test
+
+  frontend:
+    name: Frontend tests and deploy build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dalia-ts
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dalia-ts/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run Vitest suite
+        run: npm test
+
+      - name: Build frontend bundle
+        run: npm run build:deploy
+
+  wasm-integration:
+    name: Rust to WASM integration build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dalia-ts
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dalia-ts/package-lock.json
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build full Rust to WASM pipeline
+        run: npm run build

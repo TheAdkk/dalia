@@ -1,5 +1,7 @@
 # 🌸 Dalia
 
+[![CI](https://github.com/TheAdkk/dalia/actions/workflows/ci.yml/badge.svg)](https://github.com/TheAdkk/dalia/actions/workflows/ci.yml)
+
 **Real-time audio-reactive visualization engine powered by Rust/WASM and Three.js.**
 
 Dalia turns music into immersive 3D visuals — driven by math, shaders, and real-time audio analysis. No physics simulations, no baked animations. Every frame is computed from the music.
