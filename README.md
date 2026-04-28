@@ -10,6 +10,8 @@ Dalia turns music into immersive 3D visuals — driven by math, shaders, and rea
 
 [**▶ Try the Live Demo**](https://dalia-phi.vercel.app)
 
+Production is deployed automatically from the `dev` branch through Vercel Git integration.
+
 ---
 
 ## ✨ Features
@@ -121,6 +123,8 @@ npm run dev
 ```
 
 ### Production build (for deployment)
+
+This is the local build used by Vercel and for previewing production output before the automatic deploy runs.
 
 ```bash
 cd dalia-ts
