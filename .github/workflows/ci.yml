@@ -1,4 +1,4 @@
-name: Guardian CI
+name: Guardian CI and Production Deploy
 
 on:
   push:
@@ -12,58 +12,10 @@ env:
   NODE_VERSION: 22
 
 jobs:
-  rust-tests:
-    name: Rust tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: dalia-core
-
-      - name: Run Rust tests
-        working-directory: dalia-core
-        run: cargo test
-
-  frontend-tests:
-    name: Frontend tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: dalia-ts/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: dalia-ts
-        run: npm ci
-
-      - name: Run frontend tests
-        working-directory: dalia-ts
-        run: npm test
-
-      - name: Validate frontend production build
-        working-directory: dalia-ts
-        run: npm run build:deploy
-
-  wasm-integration:
-    name: WASM integration
+  guardian:
+    name: Guardian checks
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [rust-tests, frontend-tests]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -80,30 +32,48 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Cache Rust build artifacts (including wasm-pack)
+      - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: dalia-core
-          cache-all-crates: true
 
-      - name: Install wasm-pack
-        run: cargo install wasm-pack --locked
+      - name: Run Rust tests
+        working-directory: dalia-core
+        run: cargo test
 
       - name: Install frontend dependencies
         working-directory: dalia-ts
         run: npm ci
+
+      - name: Run frontend tests
+        working-directory: dalia-ts
+        run: npm test
+
+      - name: Validate frontend production build
+        working-directory: dalia-ts
+        run: npm run build:deploy
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
 
       - name: Validate Rust-to-WASM integration
         working-directory: dalia-ts
         run: npm run build
 
   deploy-production:
-    name: Deploy to Vercel
+    name: Deploy production to Vercel
     runs-on: ubuntu-latest
+    needs: guardian
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
     timeout-minutes: 20
-    needs: [wasm-integration]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    environment: production
+    concurrency:
+      group: vercel-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.deployment_url }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -115,26 +85,26 @@ jobs:
           cache: npm
           cache-dependency-path: dalia-ts/package-lock.json
 
+      - name: Install frontend dependencies
+        working-directory: dalia-ts
+        run: npm ci
+
       - name: Install Vercel CLI
-        run: npm install -g vercel@latest
+        run: npm install --global vercel@latest
 
-      - name: Pull Vercel environment
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+      # Important: disable Vercel's automatic Git deployments in the Vercel dashboard,
+      # otherwise pushes can still deploy outside this guarded workflow.
+      - name: Pull Vercel production settings
+        working-directory: dalia-ts
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
-      - name: Build for production
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel build --prod --token=$VERCEL_TOKEN
+      - name: Build Vercel production bundle
+        working-directory: dalia-ts
+        run: vercel build --prod --token="$VERCEL_TOKEN"
 
-      - name: Deploy to Vercel
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+      - name: Deploy production bundle
+        id: deploy
+        working-directory: dalia-ts
+        run: |
+          deployment_url="$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" | tail -n 1)"
+          echo "deployment_url=$deployment_url" >> "$GITHUB_OUTPUT"
