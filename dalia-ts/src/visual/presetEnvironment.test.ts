@@ -12,6 +12,7 @@ const NUMERIC_KEYS = [
   'tunnelHueMix',
   'bloomBoost',
   'glitchGain',
+  'afterimageDamp',
 ] as const;
 
 type NumericEnvironmentKey = typeof NUMERIC_KEYS[number];
@@ -53,6 +54,7 @@ describe('getPresetEnvironment', () => {
       tunnelHueMix: 0.24,
       bloomBoost: 0,
       glitchGain: 1,
+      afterimageDamp: 0.72,
     });
   });
 
@@ -71,7 +73,27 @@ describe('getPresetEnvironment', () => {
       expect(env.glitchGain).toBeLessThan(1.5);
       expect(env.tunnelHueMix).toBeGreaterThan(0.15);
       expect(env.tunnelHueMix).toBeLessThan(0.9);
+      // AfterimagePass feedback: >= 1 would never decay and burn the frame in.
+      expect(env.afterimageDamp).toBeGreaterThanOrEqual(0.3);
+      expect(env.afterimageDamp).toBeLessThan(0.95);
     }
+  });
+
+  it('keeps the lattice crisp and the dissociatives smeared', () => {
+    const drive = 0.4;
+    const trans = 0.3;
+    const envs = Array.from({ length: 26 }, (_, index) =>
+      getPresetEnvironment(index, drive, trans, true),
+    );
+
+    const lattice = envs[25];
+    for (let i = 0; i < envs.length; i += 1) {
+      if (i === 25) continue;
+      expect(lattice.afterimageDamp).toBeLessThan(envs[i].afterimageDamp);
+    }
+
+    expect(envs[24].afterimageDamp).toBeGreaterThan(envs[11].afterimageDamp); // K-Hole vs Morphing Cube
+    expect(envs[23].afterimageDamp).toBeGreaterThan(envs[0].afterimageDamp); // Recursion vs Vector Sphere
   });
 
   it('avoids repeated modulo-4 environments and preserves spacing', () => {

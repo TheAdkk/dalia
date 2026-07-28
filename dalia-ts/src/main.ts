@@ -633,7 +633,9 @@ function syncAllGeometryFromWasm() {
 
   if (!CONFIG.SINGLE_CORE_MODE) {
     syncGeometryFromWasm(sceneCtx.leftGeometry, leftEngine);
+    syncColorFromWasm(sceneCtx.leftGeometry, leftEngine);
     syncGeometryFromWasm(sceneCtx.rightGeometry, rightEngine);
+    syncColorFromWasm(sceneCtx.rightGeometry, rightEngine);
   }
 }
 
@@ -1066,6 +1068,11 @@ function renderLoop() {
   const targetBloom = Math.max(0.1, Math.min(0.5, (baseBloom + reactiveBloom) * transitionSoftness));
 
   sceneCtx.bloomPass.strength += (targetBloom - sceneCtx.bloomPass.strength) * 0.08;
+
+  // Trail length is a per-preset trait: the lattice stays crisp so the graph is
+  // readable, Recursion/K-Hole smear. Eased so preset changes don't snap.
+  const dampUniform = sceneCtx.afterimagePass.uniforms['damp'];
+  dampUniform.value += (env.afterimageDamp - dampUniform.value) * 0.06;
   sceneCtx.bloomPass.radius += (0.15 + (treb * 0.05) - sceneCtx.bloomPass.radius) * 0.05;
   sceneCtx.bloomPass.threshold = 0.25;
 

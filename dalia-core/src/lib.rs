@@ -178,8 +178,8 @@ impl DaliaEngine {
             for i in 0..NUM_VERTICES {
                 let p1 = vertex(i, current, &self.audio_state, self.time);
                 let p2 = vertex(i, next, &self.audio_state, self.time);
-                let c1 = vertex_color(i, current, &self.audio_state, self.time);
-                let c2 = vertex_color(i, next, &self.audio_state, self.time);
+                let c1 = vertex_color(i, p1, current, &self.audio_state, self.time);
+                let c2 = vertex_color(i, p2, next, &self.audio_state, self.time);
                 let idx = i * 3;
                 self.geometry_buffer[idx]     = p1.0 + (p2.0 - p1.0) * t_e;
                 self.geometry_buffer[idx + 1] = p1.1 + (p2.1 - p1.1) * t_e;
@@ -192,7 +192,7 @@ impl DaliaEngine {
             let preset = self.mashup_controller.current_preset;
             for i in 0..NUM_VERTICES {
                 let p = vertex(i, preset, &self.audio_state, self.time);
-                let c = vertex_color(i, preset, &self.audio_state, self.time);
+                let c = vertex_color(i, p, preset, &self.audio_state, self.time);
                 let idx = i * 3;
                 self.geometry_buffer[idx]     = p.0;
                 self.geometry_buffer[idx + 1] = p.1;

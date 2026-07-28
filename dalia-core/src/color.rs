@@ -4,17 +4,92 @@ use crate::presets::Preset;
 
 pub const COLOR_BUFFER_SIZE: usize = NUM_VERTICES * 3;
 
-// Per-preset palette hint: (hue_offset, hue_spread, saturation_boost, lightness_boost).
-// Only the 5 psychedelic presets diverge from the harmonic-hue rainbow baseline.
-fn palette(preset: Preset) -> (f32, f32, f32, f32) {
+/// Per-preset color direction.
+///
+/// `bands` and `radial_mix` control how the hue gradient is laid over the *shape*
+/// rather than over the vertex index: low band counts give broad legible regions,
+/// `radial_mix` trades azimuthal banding for onion-ring banding by distance.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(crate) struct Palette {
+    hue_off:     f32,
+    hue_spread:  f32,
+    sat_boost:   f32,
+    light_boost: f32,
+    bands:       f32,
+    radial_mix:  f32,
+}
+
+const fn pal(
+    hue_off: f32,
+    hue_spread: f32,
+    sat_boost: f32,
+    light_boost: f32,
+    bands: f32,
+    radial_mix: f32,
+) -> Palette {
+    Palette { hue_off, hue_spread, sat_boost, light_boost, bands, radial_mix }
+}
+
+pub(crate) fn palette(preset: Preset) -> Palette {
     match preset {
-        Preset::Peyote     => (0.95, 1.00, 0.18, 0.05),  // hot magenta→yellow rainbow
-        Preset::Hyperspace => (0.36, 0.85, 0.22, 0.08),  // emerald/magenta/gold triad
-        Preset::Mycelia    => (0.08, 0.45, -0.08, -0.02), // warm ochre→violet
-        Preset::Recursion  => (0.55, 0.95, 0.20, 0.04),  // cyan→magenta cycle
-        Preset::KHole      => (0.62, 0.30, -0.30, -0.12), // desaturated blue-black + neon
-        _                  => (0.0, 1.0, 0.0, 0.0),
+        // Geometric / structural presets: few wide bands, colors read as facets.
+        Preset::VectorSphere    => pal(0.00, 0.62, 0.00,  0.00, 1.0, 0.15),
+        Preset::MutantTorus     => pal(0.07, 0.70, 0.04,  0.02, 2.0, 0.20),
+        Preset::LissajousKnot   => pal(0.52, 0.75, 0.08,  0.02, 1.5, 0.10),
+        Preset::MorphingCube    => pal(0.14, 0.45, -0.05, -0.02, 1.0, 0.55),
+        Preset::VoxelGrid       => pal(0.48, 0.40, -0.02, -0.01, 1.0, 0.70),
+        Preset::TesseractFold   => pal(0.72, 0.85, 0.10,  0.03, 3.0, 0.25),
+        Preset::HyperbolicParaboloid => pal(0.30, 0.68, 0.02, 0.00, 2.0, 0.30),
+
+        // Field / flow presets: radial gradients, softer spread.
+        Preset::PlasmaField     => pal(0.88, 0.80, 0.12,  0.04, 1.0, 0.45),
+        Preset::FractalSpiral   => pal(0.60, 0.72, 0.05,  0.01, 2.0, 0.55),
+        Preset::ChaosRibbon     => pal(0.04, 0.90, 0.14,  0.03, 3.0, 0.10),
+        Preset::QuantumString   => pal(0.44, 0.55, 0.08,  0.02, 4.0, 0.15),
+        Preset::HeartPulse      => pal(0.97, 0.30, 0.16,  0.05, 1.0, 0.35),
+
+        // Deep-space presets: cold cores, warm rims — radial mix carries most of it.
+        Preset::NebulaVortex    => pal(0.78, 0.65, 0.06,  0.00, 1.0, 0.60),
+        Preset::GalacticWeb     => pal(0.58, 0.50, -0.04, -0.03, 1.0, 0.50),
+        Preset::BlackHoleSingularity => pal(0.66, 0.42, -0.10, -0.10, 1.0, 0.80),
+        Preset::HyperspaceJump  => pal(0.50, 0.88, 0.14,  0.04, 2.0, 0.72),
+        Preset::WormholeBridge  => pal(0.42, 0.70, 0.06,  0.00, 1.0, 0.78),
+        Preset::SupernovaRemnant => pal(0.02, 0.58, 0.14, 0.06, 1.0, 0.68),
+        Preset::AndromedaSpiral => pal(0.10, 0.52, 0.02,  0.01, 2.0, 0.62),
+        Preset::GammaRayPulsar  => pal(0.54, 0.36, 0.18,  0.05, 1.0, 0.40),
+
+        // Psychedelic set.
+        Preset::Peyote     => pal(0.95, 1.00,  0.18,  0.05, 6.0, 0.20), // hot magenta→yellow kaleidoscope
+        Preset::Hyperspace => pal(0.36, 0.85,  0.22,  0.08, 2.0, 0.75), // emerald/magenta tunnel rings
+        Preset::Mycelia    => pal(0.08, 0.45, -0.08, -0.02, 1.0, 0.40), // warm ochre→violet
+        Preset::Recursion  => pal(0.55, 0.95,  0.20,  0.04, 4.0, 0.50), // cyan→magenta recursion
+        Preset::KHole      => pal(0.62, 0.30, -0.30, -0.12, 1.0, 0.20), // void + rare neon
+        Preset::ErdosLattice => pal(0.62, 0.35, 0.00,  0.00, 1.0, 0.30), // handled specially below
     }
+}
+
+const INV_TAU: f32 = 1.0 / (2.0 * std::f32::consts::PI);
+
+/// Continuous 0..1 band coordinate derived from the vertex's position in space.
+///
+/// Using position instead of vertex index is what keeps color as legible regions:
+/// neighbouring points in space land on neighbouring hues, so bloom smears within
+/// a region instead of averaging twelve unrelated hues into grey.
+fn band_coord(pos: (f32, f32, f32), palette: Palette) -> f32 {
+    let (x, y, z) = pos;
+    if !(x.is_finite() && y.is_finite() && z.is_finite()) {
+        return 0.0;
+    }
+
+    let r = (x * x + y * y + z * z).sqrt();
+    let azimuth = z.atan2(x) * INV_TAU; // -0.5..0.5, wraps seamlessly
+    let elevation = if r > 1e-4 { y / r } else { 0.0 }; // -1..1
+    let radial = r * 0.11; // roughly one ring per 9 world units
+
+    let angular = azimuth + elevation * 0.18;
+    let mixed = angular * (1.0 - palette.radial_mix) + radial * palette.radial_mix;
+
+    (mixed * palette.bands).rem_euclid(1.0)
 }
 
 pub(crate) fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (f32, f32, f32) {
@@ -43,14 +118,11 @@ pub(crate) fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (f32, f32, f32) {
 
 pub fn vertex_color(
     index: usize,
+    pos: (f32, f32, f32),
     preset: Preset,
     audio: &AudioState,
     time: f32,
 ) -> (f32, f32, f32) {
-    let bin = index % 12;
-    let chroma_intensity = audio.chroma[bin]; // 0..~0.5 typically
-    let chroma_norm = (chroma_intensity * 6.0).clamp(0.0, 1.0);
-
     // Erdős Lattice: lattice nodes glow white-hot; edge sparks are hued by the
     // song's harmonic root. The graph reads as a crystalline structure.
     if matches!(preset, Preset::ErdosLattice) {
@@ -62,11 +134,16 @@ pub fn vertex_color(
         return hsl_to_rgb(hue, 0.92, 0.5 + audio.treb * 0.18);
     }
 
-    let (hue_off, hue_spread, sat_boost, light_boost) = palette(preset);
+    let palette = palette(preset);
 
-    // Base hue: song's harmonic root + per-bin offset modulated by palette spread.
-    let bin_offset = (bin as f32 / 12.0) * hue_spread;
-    let mut hue = audio.harmonic_hue() + bin_offset + hue_off;
+    // Band coordinate comes from the vertex's place in space, so hue varies
+    // slowly across the form. The quantized bin only picks which chroma bin
+    // drives saturation in that region.
+    let band = band_coord(pos, palette);
+    let bin = ((band * 12.0) as usize).min(11);
+    let chroma_norm = (audio.chroma[bin] * 6.0).clamp(0.0, 1.0);
+
+    let mut hue = audio.harmonic_hue() + band * palette.hue_spread + palette.hue_off;
 
     // K-Hole: rare neon accent on transients only — most points stay dark.
     if matches!(preset, Preset::KHole) {
@@ -84,11 +161,16 @@ pub fn vertex_color(
     }
 
     // Subtle temporal drift to keep colors alive even on stable tonality.
-    hue += (time * 0.04 + (bin as f32) * 0.13).sin() * 0.015;
+    hue += (time * 0.04 + band * 1.6).sin() * 0.015;
 
-    let saturation = (0.82 + chroma_norm * 0.18 + sat_boost).clamp(0.45, 1.0);
+    let saturation = (0.82 + chroma_norm * 0.18 + palette.sat_boost).clamp(0.45, 1.0);
     let conf = audio.harmonic_confidence();
-    let lightness = (0.48 + audio.energy * 0.16 + conf * 0.05 + light_boost).clamp(0.22, 0.74);
+
+    // Lightness sits low and swings wide on purpose: the points render with
+    // additive blending, so dense regions sum toward the highlights instead of
+    // clipping to white the moment two sprites overlap.
+    let lightness =
+        (0.30 + audio.energy * 0.26 + conf * 0.06 + palette.light_boost).clamp(0.07, 0.78);
 
     hsl_to_rgb(hue, saturation, lightness)
 }
@@ -181,6 +263,49 @@ mod tests {
         }
     }
 
+    // ----- band_coord ------------------------------------------------------
+
+    #[test]
+    fn band_coord_stays_in_unit_range_including_degenerate_positions() {
+        let p = palette(Preset::PlasmaField);
+        let positions = [
+            (0.0, 0.0, 0.0),
+            (1e-6, -1e-6, 0.0),
+            (12.0, -4.0, 7.5),
+            (-820.0, 640.0, -910.0),
+            (f32::NAN, 1.0, 2.0),
+            (1.0, f32::INFINITY, 2.0),
+        ];
+        for pos in positions {
+            let b = band_coord(pos, p);
+            assert!(b.is_finite(), "band_coord not finite for {:?}", pos);
+            assert!((0.0..1.0).contains(&b), "band_coord {} out of [0,1) for {:?}", b, pos);
+        }
+    }
+
+    #[test]
+    fn band_coord_is_continuous_for_neighbouring_points() {
+        // The whole point of position-based banding: points close in space must be
+        // close in hue, otherwise the cloud dithers into grey under bloom.
+        let p = palette(Preset::VectorSphere);
+        let base = (4.0_f32, 1.2_f32, -3.0_f32);
+        let near = (4.01_f32, 1.21_f32, -2.99_f32);
+
+        let a = band_coord(base, p);
+        let b = band_coord(near, p);
+        let delta = (a - b).abs().min(1.0 - (a - b).abs()); // wrap-aware
+        assert!(delta < 0.02, "neighbouring points diverged in hue: {} vs {}", a, b);
+    }
+
+    #[test]
+    fn band_coord_separates_distant_points() {
+        let p = palette(Preset::VectorSphere);
+        let a = band_coord((5.0, 0.0, 0.0), p);
+        let b = band_coord((-5.0, 0.0, 0.0), p);
+        let delta = (a - b).abs().min(1.0 - (a - b).abs());
+        assert!(delta > 0.1, "opposite sides of the form share a hue: {} vs {}", a, b);
+    }
+
     // ----- vertex_color ----------------------------------------------------
 
     #[rstest]
@@ -195,7 +320,9 @@ mod tests {
             let preset = Preset::from_index(preset_idx);
             for &index in &indices {
                 for &time in &times {
-                    let (r, g, b) = vertex_color(index, preset, &audio, time);
+                    // Feed the real geometry position so color and shape stay coupled.
+                    let pos = crate::geometry::vertex(index, preset, &audio, time);
+                    let (r, g, b) = vertex_color(index, pos, preset, &audio, time);
                     assert!(
                         r.is_finite() && g.is_finite() && b.is_finite(),
                         "non-finite color for {:?} at idx={}",
@@ -221,7 +348,8 @@ mod tests {
 
         let mut lightness_sum = 0.0_f64;
         for index in 0..samples {
-            let (r, g, b) = vertex_color(index, Preset::KHole, &audio, time);
+            let pos = crate::geometry::vertex(index, Preset::KHole, &audio, time);
+            let (r, g, b) = vertex_color(index, pos, Preset::KHole, &audio, time);
             // L from RGB ≈ (max + min) / 2 (matches HSL definition).
             let max = r.max(g).max(b);
             let min = r.min(g).min(b);
@@ -245,7 +373,8 @@ mod tests {
         let time = 0.6_f32;
         let mut min_saturation = 1.0_f32;
         for index in 0..2000 {
-            let (r, g, b) = vertex_color(index, Preset::Peyote, &audio, time);
+            let pos = crate::geometry::vertex(index, Preset::Peyote, &audio, time);
+            let (r, g, b) = vertex_color(index, pos, Preset::Peyote, &audio, time);
             let max = r.max(g).max(b);
             let min = r.min(g).min(b);
             let l = (max + min) / 2.0;
@@ -266,34 +395,64 @@ mod tests {
     }
 
     #[test]
-    fn palette_distinct_per_psychedelic_preset() {
-        let p = [
-            palette(Preset::Peyote),
-            palette(Preset::Hyperspace),
-            palette(Preset::Mycelia),
-            palette(Preset::Recursion),
-            palette(Preset::KHole),
-        ];
+    fn every_preset_has_its_own_palette() {
+        let palettes: Vec<Palette> = (0..crate::presets::PRESET_COUNT)
+            .map(|i| palette(Preset::from_index(i)))
+            .collect();
 
-        for i in 0..p.len() {
-            for j in (i + 1)..p.len() {
-                assert_ne!(p[i], p[j], "palette {} == palette {} ({:?})", i, j, p[i]);
+        for i in 0..palettes.len() {
+            for j in (i + 1)..palettes.len() {
+                assert_ne!(
+                    palettes[i],
+                    palettes[j],
+                    "{:?} and {:?} share a palette",
+                    Preset::from_index(i as u32),
+                    Preset::from_index(j as u32)
+                );
             }
         }
     }
 
     #[test]
-    fn palette_default_for_legacy_presets() {
-        // Non-psychedelic presets share identity palette (hue_off=0, spread=1, no boosts).
-        let identity = (0.0_f32, 1.0_f32, 0.0_f32, 0.0_f32);
-        for legacy in [
-            Preset::VectorSphere,
-            Preset::MutantTorus,
-            Preset::PlasmaField,
-            Preset::HeartPulse,
-            Preset::GammaRayPulsar,
-        ] {
-            assert_eq!(palette(legacy), identity, "{:?} unexpected palette", legacy);
+    fn palette_parameters_stay_in_sane_ranges() {
+        for i in 0..crate::presets::PRESET_COUNT {
+            let preset = Preset::from_index(i);
+            let p = palette(preset);
+            assert!(p.bands >= 1.0 && p.bands <= 8.0, "{:?} bands out of range: {}", preset, p.bands);
+            assert!(
+                (0.0..=1.0).contains(&p.radial_mix),
+                "{:?} radial_mix out of range: {}",
+                preset,
+                p.radial_mix
+            );
+            assert!(
+                (0.0..=1.0).contains(&p.hue_spread),
+                "{:?} hue_spread out of range: {}",
+                preset,
+                p.hue_spread
+            );
+        }
+    }
+
+    #[test]
+    fn lightness_leaves_headroom_for_additive_blending() {
+        // Points render additively; if a single point already sits near white,
+        // any overlap clips and the palette work is invisible in dense regions.
+        let mut audio = audio_energetic();
+        audio.energy = 1.0;
+        let time = 3.3_f32;
+
+        for i in 0..crate::presets::PRESET_COUNT {
+            let preset = Preset::from_index(i);
+            if matches!(preset, Preset::ErdosLattice) {
+                continue; // lattice nodes are deliberately white-hot beacons
+            }
+            for index in (0..NUM_VERTICES).step_by(499) {
+                let pos = crate::geometry::vertex(index, preset, &audio, time);
+                let (r, g, b) = vertex_color(index, pos, preset, &audio, time);
+                let l = (r.max(g).max(b) + r.min(g).min(b)) / 2.0;
+                assert!(l <= 0.80, "{:?} vertex {} too bright for additive: {}", preset, index, l);
+            }
         }
     }
 }

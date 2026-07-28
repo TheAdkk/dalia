@@ -106,18 +106,23 @@ export function setupWebGL(
   const leftWasmMemoryView = new Float32Array(wasmModule.memory.buffer, leftPtr, len);
   const rightWasmMemoryView = new Float32Array(wasmModule.memory.buffer, rightPtr, len);
 
-  // Zero-copy per-vertex color buffer (RGB float, mirrors geometry layout).
-  const colorPtr = engine.get_color_ptr();
+  // Zero-copy per-vertex color buffers (RGB float, mirror the geometry layout).
+  // All three engines expose one, so the satellite clouds follow the same
+  // harmonic palette as the core instead of being flat-tinted.
   const colorLen = engine.get_color_len();
-  const wasmColorView = new Float32Array(wasmModule.memory.buffer, colorPtr, colorLen);
+  const wasmColorView = new Float32Array(wasmModule.memory.buffer, engine.get_color_ptr(), colorLen);
+  const leftColorView = new Float32Array(wasmModule.memory.buffer, leftEngine.get_color_ptr(), colorLen);
+  const rightColorView = new Float32Array(wasmModule.memory.buffer, rightEngine.get_color_ptr(), colorLen);
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(wasmMemoryView, 3));
   geometry.setAttribute('color', new THREE.BufferAttribute(wasmColorView, 3));
   const leftGeometry = new THREE.BufferGeometry();
   leftGeometry.setAttribute('position', new THREE.BufferAttribute(leftWasmMemoryView, 3));
+  leftGeometry.setAttribute('color', new THREE.BufferAttribute(leftColorView, 3));
   const rightGeometry = new THREE.BufferGeometry();
   rightGeometry.setAttribute('position', new THREE.BufferAttribute(rightWasmMemoryView, 3));
+  rightGeometry.setAttribute('color', new THREE.BufferAttribute(rightColorView, 3));
 
   const glowTexture = createGlowTexture();
 
@@ -127,7 +132,7 @@ export function setupWebGL(
     vertexColors: true,
     blending: THREE.AdditiveBlending,
     transparent: true,
-    opacity: 0.62,
+    opacity: 0.74,
     map: glowTexture,
     depthWrite: false,
   });
@@ -135,32 +140,38 @@ export function setupWebGL(
   const points = new THREE.Points(geometry, pointsMaterial);
   scene.add(points);
 
+  // Second pass over the same 12k points: kept faint, since it stacks additively
+  // on the base layer and is the first thing to clip dense cores to white.
   const centerAccentMaterial = new THREE.PointsMaterial({
     color: 0xffd84a,
     size: 0.031,
     blending: THREE.AdditiveBlending,
     transparent: true,
-    opacity: 0.16,
+    opacity: 0.09,
     depthWrite: false,
     map: glowTexture,
   });
   const centerAccentPoints = new THREE.Points(geometry, centerAccentMaterial);
   scene.add(centerAccentPoints);
 
+  // The satellite tints multiply the per-vertex color, so the clouds keep their
+  // cool/warm stereo identity while still tracking the harmonic palette.
   const leftPointsMaterial = new THREE.PointsMaterial({
-    color: 0x55d2ff,
+    color: 0x9fe4ff,
     size: 0.043,
+    vertexColors: true,
     blending: THREE.AdditiveBlending,
     transparent: true,
-    opacity: 0.34,
+    opacity: 0.42,
     depthWrite: false,
   });
   const rightPointsMaterial = new THREE.PointsMaterial({
-    color: 0xff9a55,
+    color: 0xffc79f,
     size: 0.043,
+    vertexColors: true,
     blending: THREE.AdditiveBlending,
     transparent: true,
-    opacity: 0.34,
+    opacity: 0.42,
     depthWrite: false,
   });
 
