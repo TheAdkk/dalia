@@ -35,6 +35,7 @@ let engine: DaliaEngine;
 let leftEngine: DaliaEngine;
 let rightEngine: DaliaEngine;
 let sceneCtx: SceneContext;
+let unitCountEl: HTMLDivElement | null = null;
 
 const audio = new AudioManager();
 const ui = new UIManager();
@@ -551,8 +552,84 @@ function syncGeometryFromWasm(geometry: THREE.BufferGeometry, sourceEngine: Dali
   refreshedAttr.needsUpdate = true;
 }
 
+function syncColorFromWasm(geometry: THREE.BufferGeometry, sourceEngine: DaliaEngine) {
+  const colorAttr = geometry.getAttribute('color') as THREE.BufferAttribute | undefined;
+  if (!colorAttr) return;
+
+  const ptr = sourceEngine.get_color_ptr();
+  const len = sourceEngine.get_color_len();
+  const memoryBuffer = wasmModule.memory.buffer;
+
+  const currentArray = colorAttr.array;
+  const hasFloat32Array = currentArray instanceof Float32Array;
+
+  if (
+    hasFloat32Array &&
+    currentArray.buffer === memoryBuffer &&
+    currentArray.byteOffset === ptr &&
+    currentArray.length === len
+  ) {
+    colorAttr.needsUpdate = true;
+    return;
+  }
+
+  const nextArray = new Float32Array(memoryBuffer, ptr, len);
+  if (hasFloat32Array && currentArray.length === len) {
+    colorAttr.array = nextArray;
+    colorAttr.needsUpdate = true;
+    return;
+  }
+
+  geometry.setAttribute('color', new THREE.BufferAttribute(nextArray, 3));
+  const refreshed = geometry.getAttribute('color') as THREE.BufferAttribute;
+  refreshed.needsUpdate = true;
+}
+
+function rebindEdgeAttribute(name: 'position' | 'color', ptr: number, cap: number) {
+  const geo = sceneCtx.edgeGeometry;
+  const memoryBuffer = wasmModule.memory.buffer;
+  const attr = geo.getAttribute(name) as THREE.BufferAttribute;
+  const arr = attr.array;
+  const bound =
+    arr instanceof Float32Array &&
+    arr.buffer === memoryBuffer &&
+    arr.byteOffset === ptr &&
+    arr.length === cap;
+  if (!bound) {
+    geo.setAttribute(name, new THREE.BufferAttribute(new Float32Array(memoryBuffer, ptr, cap), 3));
+  }
+  (geo.getAttribute(name) as THREE.BufferAttribute).needsUpdate = true;
+}
+
+// Erdős Lattice: rebind the WASM edge buffers (positions + per-edge colors), draw only
+// the lit edges via setDrawRange, and surface the live unit-distance pair count.
+function syncEdgesFromWasm() {
+  const activeEdges = engine.get_active_edge_count();
+
+  if (activeEdges === 0) {
+    sceneCtx.edgeLines.visible = false;
+    sceneCtx.edgeGeometry.setDrawRange(0, 0);
+    if (unitCountEl) unitCountEl.style.display = 'none';
+    return;
+  }
+
+  const cap = engine.get_edge_capacity();
+  rebindEdgeAttribute('position', engine.get_edge_ptr(), cap);
+  rebindEdgeAttribute('color', engine.get_edge_color_ptr(), cap);
+
+  sceneCtx.edgeGeometry.setDrawRange(0, activeEdges * 2); // 2 endpoints per edge
+  sceneCtx.edgeLines.visible = true;
+
+  if (unitCountEl) {
+    unitCountEl.textContent = `UNIT-DISTANCE PAIRS · ${engine.get_unit_distance_count().toLocaleString('en-US')}`;
+    unitCountEl.style.display = 'block';
+  }
+}
+
 function syncAllGeometryFromWasm() {
   syncGeometryFromWasm(sceneCtx.geometry, engine);
+  syncColorFromWasm(sceneCtx.geometry, engine);
+  syncEdgesFromWasm();
 
   if (!CONFIG.SINGLE_CORE_MODE) {
     syncGeometryFromWasm(sceneCtx.leftGeometry, leftEngine);
@@ -863,7 +940,8 @@ function renderLoop() {
   const whiteMix = Math.max(0.004, Math.min(0.06, (energy * 0.06 + pulse * 0.04) * (1 - harmonyEmphasis * 0.75)));
   liveColor.copy(spectralColor).lerp(WHITE_POINT, whiteMix);
   
-  sceneCtx.pointsMaterial.color.lerp(liveColor, 0.22 + harmonyEmphasis * 0.3);
+  // pointsMaterial.color stays white — per-vertex chroma color drives hue.
+  // (vertexColors=true means material.color multiplies vertexColor; white = no tint.)
   sceneCtx.centerAccentMaterial.color
     .copy(accentBColor)
     .lerp(harmonyHighlightColor, 0.45 + harmonyEmphasis * 0.45)
@@ -882,13 +960,13 @@ function renderLoop() {
   sceneCtx.rightAccentMaterial.opacity = clamp01(0.05 + rightEnergySmooth * 0.14 + stereoWidthSmooth * 0.08);
 
   sceneCtx.textureMaterial.color.lerp(spectralColor, 0.16 + harmonyEmphasis * 0.16);
-  sceneCtx.pointsMaterial.opacity = Math.max(0.26, Math.min(0.62, 0.36 + presence * 0.1 + air * 0.05 + pulse * 0.03));
+  sceneCtx.pointsMaterial.opacity = Math.max(0.42, Math.min(0.85, 0.55 + presence * 0.12 + air * 0.06 + pulse * 0.05));
   sceneCtx.leftPointsMaterial.opacity = clamp01(0.08 + leftEnergySmooth * 0.2 + stereoWidthSmooth * 0.16);
   sceneCtx.rightPointsMaterial.opacity = clamp01(0.08 + rightEnergySmooth * 0.2 + stereoWidthSmooth * 0.16);
 
   sceneCtx.renderer.toneMappingExposure = Math.max(0.58, Math.min(0.86, 0.62 + loudnessVisual * 0.16 + dynamicRangeVisual * 0.05 + spectralFluxGate * 0.03));
 
-  const targetSize = 0.046 + bass * 0.1 + subBass * 0.07 + treb * 0.02 + pulse * 0.04 + psy.depthPulse * 0.03;
+  const targetSize = 0.066 + bass * 0.13 + subBass * 0.09 + treb * 0.03 + pulse * 0.05 + psy.depthPulse * 0.04;
   sceneCtx.pointsMaterial.size += (targetSize - sceneCtx.pointsMaterial.size) * 0.12;
   const coreScaleTarget = 1.6 + energy * 0.52 + pulse * 0.3 + psy.coreScaleBias;
   sceneCtx.points.scale.setScalar(sceneCtx.points.scale.x + (coreScaleTarget - sceneCtx.points.scale.x) * 0.08);
@@ -1085,6 +1163,12 @@ async function main() {
   rightEngine = new DaliaEngine();
 
   sceneCtx = setupWebGL(ui.canvas, engine, leftEngine, rightEngine, wasmModule);
+
+  // Live "Erdős number" HUD — hidden unless the Erdős Lattice preset is on screen.
+  unitCountEl = document.createElement('div');
+  unitCountEl.className = 'unit-distance-hud';
+  unitCountEl.style.display = 'none';
+  document.body.appendChild(unitCountEl);
 
   ui.initPlayer(() => {
     audio.connect(ui.audioEl, () => {

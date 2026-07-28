@@ -24,6 +24,13 @@ export class DaliaEngine {
     /**
      * @returns {number}
      */
+    get_active_edge_count() {
+        const ret = wasm.daliaengine_get_active_edge_count(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
     get_air() {
         const ret = wasm.daliaengine_get_air(this.__wbg_ptr);
         return ret;
@@ -73,9 +80,44 @@ export class DaliaEngine {
     /**
      * @returns {number}
      */
+    get_color_len() {
+        const ret = wasm.daliaengine_get_color_len(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    get_color_ptr() {
+        const ret = wasm.daliaengine_get_color_ptr(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
     get_detected_bpm() {
         const ret = wasm.daliaengine_get_detected_bpm(this.__wbg_ptr);
         return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_edge_capacity() {
+        const ret = wasm.daliaengine_get_edge_capacity(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    get_edge_color_ptr() {
+        const ret = wasm.daliaengine_get_edge_color_ptr(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    get_edge_ptr() {
+        const ret = wasm.daliaengine_get_edge_ptr(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
      * @returns {number}
@@ -250,6 +292,13 @@ export class DaliaEngine {
     get_treb() {
         const ret = wasm.daliaengine_get_treb(this.__wbg_ptr);
         return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get_unit_distance_count() {
+        const ret = wasm.daliaengine_get_unit_distance_count(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
      * @returns {number}

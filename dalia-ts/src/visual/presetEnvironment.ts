@@ -38,6 +38,18 @@ const PRESET_ENVIRONMENT_PROFILES: PresetEnvironmentProfile[] = [
   { fogColor: 0x1f0905, fogDensity: 0.023, textureOpacity: 0.18, textureSize: 0.026, noiseOpacity: 0.13, noiseSize: 0.013, tunnelSpin: 0.0022, tunnelWarp: 0.4, tunnelHueMix: 0.52, bloomBoost: 0.042, glitchGain: 1.01, driveGain: 1.15, transientGain: 0.75 },
   { fogColor: 0x091624, fogDensity: 0.02, textureOpacity: 0.17, textureSize: 0.024, noiseOpacity: 0.1, noiseSize: 0.011, tunnelSpin: 0.0019, tunnelWarp: 0.29, tunnelHueMix: 0.49, bloomBoost: 0.026, glitchGain: 0.92, driveGain: 1.02, transientGain: 0.58 },
   { fogColor: 0x25070a, fogDensity: 0.022, textureOpacity: 0.19, textureSize: 0.027, noiseOpacity: 0.14, noiseSize: 0.014, tunnelSpin: 0.0026, tunnelWarp: 0.5, tunnelHueMix: 0.68, bloomBoost: 0.044, glitchGain: 1.05, driveGain: 1.2, transientGain: 0.78 },
+  // Peyote — warm magenta/orange haze, strong bloom on hex symmetry
+  { fogColor: 0x1a0518, fogDensity: 0.014, textureOpacity: 0.22, textureSize: 0.028, noiseOpacity: 0.12, noiseSize: 0.014, tunnelSpin: 0.0019, tunnelWarp: 0.28, tunnelHueMix: 0.62, bloomBoost: 0.052, glitchGain: 0.86, driveGain: 1.04, transientGain: 0.58 },
+  // Hyperspace (DMT) — emerald/magenta tunnel, max bloom
+  { fogColor: 0x02110e, fogDensity: 0.024, textureOpacity: 0.24, textureSize: 0.03, noiseOpacity: 0.16, noiseSize: 0.016, tunnelSpin: 0.0032, tunnelWarp: 0.62, tunnelHueMix: 0.78, bloomBoost: 0.064, glitchGain: 1.08, driveGain: 1.22, transientGain: 0.82 },
+  // Mycelia (psilocybin) — warm ochre, soft slow bloom
+  { fogColor: 0x110c05, fogDensity: 0.022, textureOpacity: 0.18, textureSize: 0.022, noiseOpacity: 0.10, noiseSize: 0.013, tunnelSpin: 0.0009, tunnelWarp: 0.16, tunnelHueMix: 0.42, bloomBoost: 0.038, glitchGain: 0.78, driveGain: 0.92, transientGain: 0.46 },
+  // Recursion (LSD) — swirling cyan/violet, heavy bloom for tracers
+  { fogColor: 0x05081a, fogDensity: 0.019, textureOpacity: 0.21, textureSize: 0.026, noiseOpacity: 0.13, noiseSize: 0.014, tunnelSpin: 0.0027, tunnelWarp: 0.55, tunnelHueMix: 0.72, bloomBoost: 0.058, glitchGain: 0.98, driveGain: 1.14, transientGain: 0.70 },
+  // K-Hole (ketamine) — near-black void, sparse neon, low glitch
+  { fogColor: 0x010104, fogDensity: 0.034, textureOpacity: 0.06, textureSize: 0.012, noiseOpacity: 0.04, noiseSize: 0.008, tunnelSpin: 0.0006, tunnelWarp: 0.08, tunnelHueMix: 0.18, bloomBoost: 0.032, glitchGain: 0.66, driveGain: 0.74, transientGain: 0.86 },
+  // Erdős Lattice — cold crystalline blue, clear air to read the graph, high bloom for edge glow, low glitch (K-Hole stays the calmest)
+  { fogColor: 0x030814, fogDensity: 0.013, textureOpacity: 0.09, textureSize: 0.015, noiseOpacity: 0.05, noiseSize: 0.009, tunnelSpin: 0.0007, tunnelWarp: 0.1, tunnelHueMix: 0.46, bloomBoost: 0.056, glitchGain: 0.7, driveGain: 1.0, transientGain: 0.6 },
 ];
 
 function clamp01(value: number): number {

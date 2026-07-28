@@ -51,6 +51,9 @@ export interface SceneContext {
   waveformMaterial: THREE.LineBasicMaterial;
   waveformLine: THREE.Line;
   waveformPositions: Float32Array;
+  edgeGeometry: THREE.BufferGeometry;
+  edgeMaterial: THREE.LineBasicMaterial;
+  edgeLines: THREE.LineSegments;
 }
 
 function createGlowTexture() {
@@ -103,8 +106,14 @@ export function setupWebGL(
   const leftWasmMemoryView = new Float32Array(wasmModule.memory.buffer, leftPtr, len);
   const rightWasmMemoryView = new Float32Array(wasmModule.memory.buffer, rightPtr, len);
 
+  // Zero-copy per-vertex color buffer (RGB float, mirrors geometry layout).
+  const colorPtr = engine.get_color_ptr();
+  const colorLen = engine.get_color_len();
+  const wasmColorView = new Float32Array(wasmModule.memory.buffer, colorPtr, colorLen);
+
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(wasmMemoryView, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(wasmColorView, 3));
   const leftGeometry = new THREE.BufferGeometry();
   leftGeometry.setAttribute('position', new THREE.BufferAttribute(leftWasmMemoryView, 3));
   const rightGeometry = new THREE.BufferGeometry();
@@ -113,8 +122,9 @@ export function setupWebGL(
   const glowTexture = createGlowTexture();
 
   const pointsMaterial = new THREE.PointsMaterial({
-    color: 0xaa55ff,
-    size: 0.05,
+    color: 0xffffff,
+    size: 0.068,
+    vertexColors: true,
     blending: THREE.AdditiveBlending,
     transparent: true,
     opacity: 0.62,
@@ -315,6 +325,30 @@ export function setupWebGL(
   waveformLine.visible = CONFIG.SHOW_WAVEFORM;
   scene.add(waveformLine);
 
+  // Erdős Lattice: unit-distance edges as additive line segments, fed zero-copy from
+  // the WASM edge buffers (endpoint pairs). draw range + visibility are driven per
+  // frame in main.ts by the active edge count.
+  const edgePtr = engine.get_edge_ptr();
+  const edgeCap = engine.get_edge_capacity();
+  const edgeColorPtr = engine.get_edge_color_ptr();
+  const edgeView = new Float32Array(wasmModule.memory.buffer, edgePtr, edgeCap);
+  const edgeColorView = new Float32Array(wasmModule.memory.buffer, edgeColorPtr, edgeCap);
+  const edgeGeometry = new THREE.BufferGeometry();
+  edgeGeometry.setAttribute('position', new THREE.BufferAttribute(edgeView, 3));
+  edgeGeometry.setAttribute('color', new THREE.BufferAttribute(edgeColorView, 3));
+  edgeGeometry.setDrawRange(0, 0);
+  const edgeMaterial = new THREE.LineBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.92,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const edgeLines = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+  edgeLines.frustumCulled = false; // positions live in WASM memory; skip bounding-sphere culling
+  edgeLines.visible = false;
+  scene.add(edgeLines);
+
   scene.fog = new THREE.FogExp2(0x000000, 0.03);
 
   const renderScene = new RenderPass(scene, camera);
@@ -354,6 +388,7 @@ export function setupWebGL(
     leftPointsMaterial, rightPointsMaterial, leftPoints, rightPoints, leftAccentMaterial, rightAccentMaterial,
     leftAccentPoints, rightAccentPoints, textureMaterial, texturePoints, noiseMaterial, noisePoints,
     tunnelGeometry, tunnelMaterial, tunnelPoints, tunnelPositions, sparkRingMaterial, sparkRingPoints,
-    waveformGeometry, waveformMaterial, waveformLine, waveformPositions
+    waveformGeometry, waveformMaterial, waveformLine, waveformPositions,
+    edgeGeometry, edgeMaterial, edgeLines
   };
 }

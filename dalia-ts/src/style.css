@@ -721,3 +721,25 @@ input[type="range"]::-webkit-slider-thumb:hover {
   }
 }
 
+/* ─── Erdős Lattice: live unit-distance pair counter ─── */
+.unit-distance-hud {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: rgba(141, 201, 255, 0.92);
+  text-shadow: 0 0 12px rgba(80, 160, 255, 0.55);
+  padding: 6px 14px;
+  border: 1px solid rgba(141, 201, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(3, 8, 20, 0.42);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+

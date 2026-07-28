@@ -90,6 +90,18 @@ const PRESET_SIGNATURES: PresetSignature[] = [
   { breatheHz: 1.75, swingHz: 0.98, phase: 12.0, scaleBase: 0.06, scaleBeat: 0.31, scaleRush: 0.2, liftGain: 0.46, twistGain: 1.08, driftGain: 0.54, orbitGain: 1.02, zoomGain: 0.7, lookGain: 0.84, rollGain: 0.88, tunnelGain: 0.96, spinGain: 1.1, warpGain: 1.26, parallaxGain: 1.02 },
   // Gamma-Ray Pulsar
   { breatheHz: 3.35, swingHz: 2.35, phase: 12.6, scaleBase: 0.13, scaleBeat: 0.58, scaleRush: 0.42, liftGain: 0.92, twistGain: 2.18, driftGain: 1.06, orbitGain: 1.94, zoomGain: 1.26, lookGain: 1.52, rollGain: 1.66, tunnelGain: 1.72, spinGain: 2.12, warpGain: 2.18, parallaxGain: 1.48 },
+  // Peyote — slow radial breath, big scale-on-beat, low drift (kaleidoscope stays centered)
+  { breatheHz: 1.15, swingHz: 0.55, phase: 13.2, scaleBase: 0.10, scaleBeat: 0.62, scaleRush: 0.16, liftGain: 0.32, twistGain: 1.12, driftGain: 0.14, orbitGain: 0.46, zoomGain: 0.78, lookGain: 0.62, rollGain: 0.62, tunnelGain: 0.42, spinGain: 0.92, warpGain: 1.08, parallaxGain: 0.86 },
+  // Hyperspace (DMT) — extreme tunnel speed/spin, deep zoom
+  { breatheHz: 2.95, swingHz: 1.85, phase: 13.8, scaleBase: 0.11, scaleBeat: 0.5, scaleRush: 0.46, liftGain: 0.66, twistGain: 1.78, driftGain: 0.72, orbitGain: 1.42, zoomGain: 1.58, lookGain: 1.68, rollGain: 1.22, tunnelGain: 2.48, spinGain: 2.32, warpGain: 2.34, parallaxGain: 1.62 },
+  // Mycelia (psilocybin) — slow, soft, near-zero rotation, gentle breath
+  { breatheHz: 0.72, swingHz: 0.34, phase: 14.4, scaleBase: 0.04, scaleBeat: 0.22, scaleRush: 0.06, liftGain: 0.22, twistGain: 0.36, driftGain: 0.42, orbitGain: 0.24, zoomGain: 0.28, lookGain: 0.42, rollGain: 0.18, tunnelGain: 0.36, spinGain: 0.28, warpGain: 0.62, parallaxGain: 0.74 },
+  // Recursion (LSD) — deep breathing zoom, mid drift, recursive feel
+  { breatheHz: 1.85, swingHz: 1.02, phase: 15.0, scaleBase: 0.08, scaleBeat: 0.4, scaleRush: 0.32, liftGain: 0.48, twistGain: 1.32, driftGain: 0.62, orbitGain: 0.94, zoomGain: 1.22, lookGain: 1.06, rollGain: 0.92, tunnelGain: 1.16, spinGain: 1.42, warpGain: 1.86, parallaxGain: 1.18 },
+  // K-Hole (ketamine) — near-zero rotation, sub-bass-driven inward zoom only
+  { breatheHz: 0.42, swingHz: 0.18, phase: 15.6, scaleBase: 0.02, scaleBeat: 0.12, scaleRush: 0.04, liftGain: 0.08, twistGain: 0.14, driftGain: 0.08, orbitGain: 0.08, zoomGain: 1.84, lookGain: 1.92, rollGain: 0.08, tunnelGain: 1.62, spinGain: 0.12, warpGain: 0.32, parallaxGain: 0.46 },
+  // Erdős Lattice — slow stately turn to read the graph, bass-locked breath, no tunnel
+  { breatheHz: 0.85, swingHz: 0.4, phase: 16.2, scaleBase: 0.05, scaleBeat: 0.3, scaleRush: 0.12, liftGain: 0.3, twistGain: 0.5, driftGain: 0.2, orbitGain: 0.66, zoomGain: 0.5, lookGain: 0.5, rollGain: 0.3, tunnelGain: 0.4, spinGain: 0.6, warpGain: 0.6, parallaxGain: 0.7 },
 ];
 
 function clamp01(value: number): number {

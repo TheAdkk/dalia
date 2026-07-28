@@ -6,6 +6,7 @@ export class DaliaEngine {
     [Symbol.dispose](): void;
     clear_lookahead_timeline(): void;
     current_preset_index(): number;
+    get_active_edge_count(): number;
     get_air(): number;
     get_analysis_readiness(): number;
     get_bass(): number;
@@ -13,7 +14,12 @@ export class DaliaEngine {
     get_bpm_confidence(): number;
     get_buffered_energy_mean(): number;
     get_chroma_base(): number;
+    get_color_len(): number;
+    get_color_ptr(): number;
     get_detected_bpm(): number;
+    get_edge_capacity(): number;
+    get_edge_color_ptr(): number;
+    get_edge_ptr(): number;
     get_energy(): number;
     get_future_bass_sustain_ratio(horizon_seconds: number, threshold: number): number;
     get_future_bass_sustain_ratio_at(current_time_seconds: number, horizon_seconds: number, threshold: number): number;
@@ -37,6 +43,7 @@ export class DaliaEngine {
     get_sub_bass(): number;
     get_transient_strength(): number;
     get_treb(): number;
+    get_unit_distance_count(): number;
     get_upper_mid(): number;
     has_lookahead_timeline(): boolean;
     constructor();
@@ -57,6 +64,7 @@ export interface InitOutput {
     readonly __wbg_daliaengine_free: (a: number, b: number) => void;
     readonly daliaengine_clear_lookahead_timeline: (a: number) => void;
     readonly daliaengine_current_preset_index: (a: number) => number;
+    readonly daliaengine_get_active_edge_count: (a: number) => number;
     readonly daliaengine_get_air: (a: number) => number;
     readonly daliaengine_get_analysis_readiness: (a: number) => number;
     readonly daliaengine_get_bass: (a: number) => number;
@@ -64,7 +72,12 @@ export interface InitOutput {
     readonly daliaengine_get_bpm_confidence: (a: number) => number;
     readonly daliaengine_get_buffered_energy_mean: (a: number) => number;
     readonly daliaengine_get_chroma_base: (a: number) => number;
+    readonly daliaengine_get_color_len: (a: number) => number;
+    readonly daliaengine_get_color_ptr: (a: number) => number;
     readonly daliaengine_get_detected_bpm: (a: number) => number;
+    readonly daliaengine_get_edge_capacity: (a: number) => number;
+    readonly daliaengine_get_edge_color_ptr: (a: number) => number;
+    readonly daliaengine_get_edge_ptr: (a: number) => number;
     readonly daliaengine_get_energy: (a: number) => number;
     readonly daliaengine_get_future_bass_sustain_ratio: (a: number, b: number, c: number) => number;
     readonly daliaengine_get_future_bass_sustain_ratio_at: (a: number, b: number, c: number, d: number) => number;
@@ -88,6 +101,7 @@ export interface InitOutput {
     readonly daliaengine_get_sub_bass: (a: number) => number;
     readonly daliaengine_get_transient_strength: (a: number) => number;
     readonly daliaengine_get_treb: (a: number) => number;
+    readonly daliaengine_get_unit_distance_count: (a: number) => number;
     readonly daliaengine_get_upper_mid: (a: number) => number;
     readonly daliaengine_has_lookahead_timeline: (a: number) => number;
     readonly daliaengine_new: () => number;

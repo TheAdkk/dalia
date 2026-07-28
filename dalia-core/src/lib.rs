@@ -2,18 +2,26 @@ mod presets;
 mod audio;
 mod mashup;
 mod geometry;
+mod color;
+mod unit_lattice;
 
 use wasm_bindgen::prelude::*;
 
 use audio::AudioState;
 use mashup::MashupController;
 use geometry::{vertex, BUFFER_SIZE, NUM_VERTICES};
+use color::{vertex_color, COLOR_BUFFER_SIZE};
 
 #[wasm_bindgen]
 pub struct DaliaEngine {
     processed_data:    Vec<f32>,
     time:              f32,
     geometry_buffer:   Vec<f32>,
+    color_buffer:      Vec<f32>,
+    edge_buffer:       Vec<f32>,
+    edge_color_buffer: Vec<f32>,
+    active_edge_count: usize,
+    unit_distance_count: u32,
     mashup_controller: MashupController,
     audio_state:       AudioState,
 }
@@ -26,6 +34,11 @@ impl DaliaEngine {
             processed_data:    Vec::new(),
             time:              0.0,
             geometry_buffer:   vec![0.0; BUFFER_SIZE],
+            color_buffer:      vec![1.0; COLOR_BUFFER_SIZE],
+            edge_buffer:       vec![0.0; unit_lattice::MAX_EDGES * unit_lattice::EDGE_STRIDE],
+            edge_color_buffer: vec![0.0; unit_lattice::MAX_EDGES * unit_lattice::EDGE_STRIDE],
+            active_edge_count: 0,
+            unit_distance_count: 0,
             mashup_controller: MashupController::new(),
             audio_state:       AudioState::new(),
         }
@@ -157,32 +170,72 @@ impl DaliaEngine {
         self.time += delta_time;
         self.mashup_controller.update();
 
-        // Generate geometry
+        // Generate geometry + per-vertex color
         if let Some(next) = self.mashup_controller.next_preset {
             let t = self.mashup_controller.transition_progress;
             let t_e = t * t * (3.0 - 2.0 * t); // smoothstep
+            let current = self.mashup_controller.current_preset;
             for i in 0..NUM_VERTICES {
-                let p1 = vertex(i, self.mashup_controller.current_preset, &self.audio_state, self.time);
+                let p1 = vertex(i, current, &self.audio_state, self.time);
                 let p2 = vertex(i, next, &self.audio_state, self.time);
+                let c1 = vertex_color(i, current, &self.audio_state, self.time);
+                let c2 = vertex_color(i, next, &self.audio_state, self.time);
                 let idx = i * 3;
                 self.geometry_buffer[idx]     = p1.0 + (p2.0 - p1.0) * t_e;
                 self.geometry_buffer[idx + 1] = p1.1 + (p2.1 - p1.1) * t_e;
                 self.geometry_buffer[idx + 2] = p1.2 + (p2.2 - p1.2) * t_e;
+                self.color_buffer[idx]     = c1.0 + (c2.0 - c1.0) * t_e;
+                self.color_buffer[idx + 1] = c1.1 + (c2.1 - c1.1) * t_e;
+                self.color_buffer[idx + 2] = c1.2 + (c2.2 - c1.2) * t_e;
             }
         } else {
             let preset = self.mashup_controller.current_preset;
             for i in 0..NUM_VERTICES {
                 let p = vertex(i, preset, &self.audio_state, self.time);
+                let c = vertex_color(i, preset, &self.audio_state, self.time);
                 let idx = i * 3;
                 self.geometry_buffer[idx]     = p.0;
                 self.geometry_buffer[idx + 1] = p.1;
                 self.geometry_buffer[idx + 2] = p.2;
+                self.color_buffer[idx]     = c.0;
+                self.color_buffer[idx + 1] = c.1;
+                self.color_buffer[idx + 2] = c.2;
             }
+        }
+
+        // Erdős Lattice: build the unit-distance edge buffer + live pair count.
+        // Edges belong to whichever preset is becoming visible (current, or the
+        // transition target while entering) so they fade in/out with the morph.
+        let visible = self
+            .mashup_controller
+            .next_preset
+            .unwrap_or(self.mashup_controller.current_preset);
+        if visible == presets::Preset::ErdosLattice {
+            self.active_edge_count = unit_lattice::build_edges(
+                &self.audio_state,
+                self.time,
+                &mut self.edge_buffer,
+                &mut self.edge_color_buffer,
+            );
+            self.unit_distance_count =
+                unit_lattice::unit_distance_count(&self.audio_state, self.time);
+        } else {
+            self.active_edge_count = 0;
+            self.unit_distance_count = 0;
         }
     }
 
     pub fn get_geometry_ptr(&self) -> *const f32 { self.geometry_buffer.as_ptr() }
     pub fn get_geometry_len(&self) -> usize       { self.geometry_buffer.len() }
+    pub fn get_color_ptr(&self) -> *const f32 { self.color_buffer.as_ptr() }
+    pub fn get_color_len(&self) -> usize       { self.color_buffer.len() }
     pub fn get_processed_data_ptr(&self) -> *const f32 { self.processed_data.as_ptr() }
     pub fn get_processed_data_len(&self) -> usize      { self.processed_data.len() }
+
+    // Erdős Lattice edge geometry: interleaved line-segment endpoints (xyz pairs).
+    pub fn get_edge_ptr(&self) -> *const f32 { self.edge_buffer.as_ptr() }
+    pub fn get_edge_color_ptr(&self) -> *const f32 { self.edge_color_buffer.as_ptr() }
+    pub fn get_edge_capacity(&self) -> usize { self.edge_buffer.len() }
+    pub fn get_active_edge_count(&self) -> u32 { self.active_edge_count as u32 }
+    pub fn get_unit_distance_count(&self) -> u32 { self.unit_distance_count }
 }

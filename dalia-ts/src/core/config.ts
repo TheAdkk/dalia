@@ -20,6 +20,12 @@ export const CONFIG = {
     'Supernova Remnant',
     'Andromeda Spiral',
     'Gamma-Ray Pulsar',
+    'Peyote',
+    'Hyperspace',
+    'Mycelia',
+    'Recursion',
+    'K-Hole',
+    'Erdős Lattice',
   ],
   SPECTRAL_PALETTE: [
     '#08120A', '#18BF34', '#B8E61F', '#FFB11A',

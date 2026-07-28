@@ -20,7 +20,15 @@ pub enum Preset {
     SupernovaRemnant,
     AndromedaSpiral,
     GammaRayPulsar,
+    Peyote,
+    Hyperspace,
+    Mycelia,
+    Recursion,
+    KHole,
+    ErdosLattice,
 }
+
+pub const PRESET_COUNT: u32 = 26;
 
 impl Preset {
     pub fn next(self) -> Preset {
@@ -44,13 +52,19 @@ impl Preset {
             Preset::WormholeBridge      => Preset::SupernovaRemnant,
             Preset::SupernovaRemnant    => Preset::AndromedaSpiral,
             Preset::AndromedaSpiral     => Preset::GammaRayPulsar,
-            Preset::GammaRayPulsar      => Preset::VectorSphere,
+            Preset::GammaRayPulsar      => Preset::Peyote,
+            Preset::Peyote              => Preset::Hyperspace,
+            Preset::Hyperspace          => Preset::Mycelia,
+            Preset::Mycelia             => Preset::Recursion,
+            Preset::Recursion           => Preset::KHole,
+            Preset::KHole               => Preset::ErdosLattice,
+            Preset::ErdosLattice        => Preset::VectorSphere,
         }
     }
 
     pub fn prev(self) -> Preset {
         match self {
-            Preset::VectorSphere         => Preset::GammaRayPulsar,
+            Preset::VectorSphere         => Preset::ErdosLattice,
             Preset::MutantTorus          => Preset::VectorSphere,
             Preset::LissajousKnot        => Preset::MutantTorus,
             Preset::PlasmaField          => Preset::LissajousKnot,
@@ -70,6 +84,12 @@ impl Preset {
             Preset::SupernovaRemnant     => Preset::WormholeBridge,
             Preset::AndromedaSpiral      => Preset::SupernovaRemnant,
             Preset::GammaRayPulsar       => Preset::AndromedaSpiral,
+            Preset::Peyote               => Preset::GammaRayPulsar,
+            Preset::Hyperspace           => Preset::Peyote,
+            Preset::Mycelia              => Preset::Hyperspace,
+            Preset::Recursion            => Preset::Mycelia,
+            Preset::KHole                => Preset::Recursion,
+            Preset::ErdosLattice         => Preset::KHole,
         }
     }
 
@@ -95,11 +115,17 @@ impl Preset {
             Preset::SupernovaRemnant     => 17,
             Preset::AndromedaSpiral      => 18,
             Preset::GammaRayPulsar       => 19,
+            Preset::Peyote               => 20,
+            Preset::Hyperspace           => 21,
+            Preset::Mycelia              => 22,
+            Preset::Recursion            => 23,
+            Preset::KHole                => 24,
+            Preset::ErdosLattice         => 25,
         }
     }
 
     pub fn from_index(i: u32) -> Preset {
-        match i % 20 {
+        match i % PRESET_COUNT {
             0  => Preset::VectorSphere,
             1  => Preset::MutantTorus,
             2  => Preset::LissajousKnot,
@@ -119,29 +145,35 @@ impl Preset {
             16 => Preset::WormholeBridge,
             17 => Preset::SupernovaRemnant,
             18 => Preset::AndromedaSpiral,
-            _  => Preset::GammaRayPulsar,
+            19 => Preset::GammaRayPulsar,
+            20 => Preset::Peyote,
+            21 => Preset::Hyperspace,
+            22 => Preset::Mycelia,
+            23 => Preset::Recursion,
+            24 => Preset::KHole,
+            _  => Preset::ErdosLattice,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Preset;
+    use super::{Preset, PRESET_COUNT};
 
     #[test]
     fn index_roundtrip_matches_all_variants() {
-        for i in 0..20_u32 {
+        for i in 0..PRESET_COUNT {
             let preset = Preset::from_index(i);
             assert_eq!(preset.index(), i);
         }
 
-        assert_eq!(Preset::from_index(20), Preset::VectorSphere);
-        assert_eq!(Preset::from_index(39), Preset::GammaRayPulsar);
+        assert_eq!(Preset::from_index(PRESET_COUNT), Preset::VectorSphere);
+        assert_eq!(Preset::from_index(PRESET_COUNT * 2 - 1), Preset::ErdosLattice);
     }
 
     #[test]
     fn next_prev_are_inverse_for_all_presets() {
-        for i in 0..20_u32 {
+        for i in 0..PRESET_COUNT {
             let preset = Preset::from_index(i);
             assert_eq!(preset.next().prev(), preset);
             assert_eq!(preset.prev().next(), preset);
@@ -150,10 +182,10 @@ mod tests {
 
     #[test]
     fn full_next_cycle_visits_all_presets_once() {
-        let mut seen = [false; 20];
+        let mut seen = vec![false; PRESET_COUNT as usize];
         let mut current = Preset::VectorSphere;
 
-        for _ in 0..20 {
+        for _ in 0..PRESET_COUNT {
             let idx = current.index() as usize;
             assert!(!seen[idx], "preset repeated before cycle completion at index {idx}");
             seen[idx] = true;

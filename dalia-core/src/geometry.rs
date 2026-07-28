@@ -26,6 +26,12 @@ pub fn vertex(index: usize, preset: Preset, audio: &AudioState, time: f32) -> (f
         Preset::SupernovaRemnant     => vertex_supernova_remnant(index, audio, time),
         Preset::AndromedaSpiral      => vertex_andromeda_spiral(index, audio, time),
         Preset::GammaRayPulsar       => vertex_gamma_ray_pulsar(index, audio, time),
+        Preset::Peyote               => vertex_peyote(index, audio, time),
+        Preset::Hyperspace           => vertex_hyperspace(index, audio, time),
+        Preset::Mycelia              => vertex_mycelia(index, audio, time),
+        Preset::Recursion            => vertex_recursion(index, audio, time),
+        Preset::KHole                => vertex_k_hole(index, audio, time),
+        Preset::ErdosLattice         => crate::unit_lattice::vertex(index, audio, time),
     }
 }
 
@@ -619,13 +625,216 @@ fn vertex_gamma_ray_pulsar(index: usize, audio: &AudioState, time: f32) -> (f32,
     (x.clamp(-9.0, 9.0), y.clamp(-32.0, 32.0), z.clamp(-9.0, 9.0))
 }
 
+// ---------------------------------------------------------------------------
+// Psychedelic presets — visuals inspired by Klüver form constants and
+// phenomenological reports of altered states. References inline in plan file.
+// ---------------------------------------------------------------------------
+
+fn vertex_peyote(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    // Mescaline / Klüver: phyllotaxis dot-spirals folded through n-way kaleidoscope.
+    let f = index as f32;
+    let n = NUM_VERTICES as f32;
+
+    let golden = std::f32::consts::PI * (3.0 - (5.0_f32).sqrt());
+    let r_norm = (f / n).sqrt();
+    let raw_angle = golden * f + time * (0.18 + audio.mid * 0.6);
+
+    // Beat-driven segment count: 6 ↔ 12.
+    let segments = 6.0 + (audio.bass * 6.0 + audio.treb * 2.0).floor().min(6.0);
+    let segment_span = std::f32::consts::TAU / segments;
+    let folded = (raw_angle.rem_euclid(segment_span * 2.0) - segment_span).abs();
+
+    let breathe = (time * 1.1 + r_norm * 4.0).sin();
+    let petal_radius = 3.4 + audio.bass * 2.4 + breathe * (0.4 + audio.sub_bass * 0.9);
+    let radius = r_norm * petal_radius;
+
+    let x = folded.cos() * radius;
+    let y = folded.sin() * radius;
+
+    let z_breath = (r_norm * 6.0 + time * 2.0).sin() * (0.35 + audio.energy * 0.55);
+    let z_filigree = (f * 0.041 + time * 3.4).sin() * audio.treb * 0.6;
+    let z = z_breath + z_filigree;
+
+    (x, y, z)
+}
+
+fn vertex_hyperspace(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    // DMT: jeweled hyperbolic tunnel — receding rings + per-ring facet pop.
+    let f = index as f32;
+    let n = NUM_VERTICES as f32;
+    let ratio = f / n;
+
+    // 80 rings of ~150 vertices each.
+    let ring_count = 80.0;
+    let ring_idx = (ratio * ring_count).floor();
+    let in_ring = ratio * ring_count - ring_idx;
+
+    let facets = 7.0; // {7,3} tiling hint
+    let facet_angle = (in_ring * facets).fract() * std::f32::consts::TAU / facets;
+    let angle = in_ring * std::f32::consts::TAU + facet_angle * 0.5;
+
+    let speed = 4.0 + audio.energy * 18.0 + audio.sub_bass * 12.0;
+    let z_scroll = (time * speed + ring_idx * 1.6) % 100.0 - 50.0;
+
+    // Hyperbolic flare: closer rings narrower, far rings flared.
+    let depth_norm = (z_scroll + 50.0) / 100.0;
+    let flare = 0.6 + depth_norm * depth_norm * 4.0;
+    let base_radius = (1.0 + audio.bass * 1.6) * flare;
+
+    // Facet pop on transient.
+    let jewel = (ring_idx * 1.7 + in_ring * facets * std::f32::consts::TAU).sin();
+    let pop = jewel * (0.18 + audio.treb * 0.45) * (1.0 + audio.presence * 1.4);
+
+    let r = base_radius + pop;
+    let x = angle.cos() * r;
+    let y = angle.sin() * r * 0.92;
+
+    let z = z_scroll + jewel * audio.presence * 0.6;
+
+    (x, y, z)
+}
+
+fn vertex_mycelia(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    // Psilocybin: organic membrane with branching warm veins.
+    // Cheap reaction-diffusion-LIKE flow: stacked multi-frequency sin lattice + curl.
+    let f = index as f32;
+    let n = NUM_VERTICES as f32;
+
+    let side = (n.sqrt()) as usize;
+    let ix = (index % side) as f32 / side as f32;
+    let iy = (index / side) as f32 / side as f32;
+    let px = (ix - 0.5) * 9.0;
+    let py = (iy - 0.5) * 9.0;
+
+    let feed = 0.04 + audio.bass * 0.06;
+    let kill = 0.06 + audio.treb * 0.04;
+    let t_slow = time * (0.3 + audio.sub_bass * 0.7);
+
+    // Two cross-modulated noise terms imitate Gray-Scott activator/inhibitor.
+    let activator = (px * (1.2 + feed * 6.0) + (py * 0.7 + t_slow).sin() * 2.0).sin()
+        * ((py * (1.5 + kill * 5.0) - t_slow * 1.3).cos());
+    let inhibitor = ((px * 0.6 + py * 1.1 + t_slow * 0.6).sin()
+        * (px * 1.3 - py * 0.9 + t_slow * 0.4).cos())
+        * 0.7;
+
+    let vein = (activator - inhibitor).tanh();
+
+    // Curl-noise lateral advection.
+    let curl_x = (py * 0.8 + time * 0.5 + f * 0.0009).sin() * 0.35;
+    let curl_y = (px * 0.8 - time * 0.4 + f * 0.0007).cos() * 0.35;
+
+    let bulge = 1.0 + audio.energy * 0.8;
+    let x = (px + curl_x) * bulge;
+    let y = (py + curl_y) * bulge;
+    let z = vein * (1.4 + audio.bass * 1.6 + audio.transient_strength() * 0.8)
+          + (time * 0.6 + ix * 12.0 + iy * 12.0).sin() * audio.presence * 0.35;
+
+    (x, y, z)
+}
+
+fn vertex_recursion(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    // LSD: Julia escape mapped to 3D. Iteration depth → z. Tracers via composer.
+    let f = index as f32;
+    let n = NUM_VERTICES as f32;
+
+    let side = (n.sqrt()) as usize;
+    let ix = (index % side) as f32 / side as f32;
+    let iy = (index / side) as f32 / side as f32;
+
+    // Audio-driven Julia constant c (breathes).
+    let zoom = 1.4 + (time * 0.18).sin() * 0.5 + audio.treb * 0.7;
+    let cx = -0.7 + (time * 0.12).cos() * 0.32 + (audio.bass - 0.5) * 0.4;
+    let cy = 0.27 + (time * 0.09).sin() * 0.22 + (audio.mid - 0.5) * 0.3;
+
+    let mut zx = (ix - 0.5) * 3.6 / zoom;
+    let mut zy = (iy - 0.5) * 3.6 / zoom;
+
+    let mut escape = 0_usize;
+    const MAX_ITER: usize = 24;
+    for i in 0..MAX_ITER {
+        let zx2 = zx * zx;
+        let zy2 = zy * zy;
+        if zx2 + zy2 > 4.0 {
+            escape = i;
+            break;
+        }
+        let new_zx = zx2 - zy2 + cx;
+        zy = 2.0 * zx * zy + cy;
+        zx = new_zx;
+        escape = i + 1;
+    }
+
+    let esc_norm = escape as f32 / MAX_ITER as f32;
+
+    // Breathing surface displacement.
+    let breath = (time * (1.1 + audio.bass * 1.6) + esc_norm * 8.0).sin()
+        * (0.4 + audio.sub_bass * 0.9);
+
+    let x = (ix - 0.5) * 9.0;
+    let y = (iy - 0.5) * 9.0;
+    let z = (esc_norm - 0.5) * (3.6 + audio.energy * 2.4) + breath;
+
+    // Use f to break vertical banding artifact mildly.
+    let jitter = (f * 12.9898).sin() * audio.air * 0.18;
+    (x + jitter, y - jitter * 0.5, z)
+}
+
+fn vertex_k_hole(index: usize, audio: &AudioState, time: f32) -> (f32, f32, f32) {
+    // Ketamine: receding void tunnel + sparse machine debris + slow drift clouds.
+    let f = index as f32;
+
+    // Pseudo-random radial+angular distribution.
+    let seed_a = ((f * 13.71).sin() * 437.13).fract();
+    let seed_r = ((f * 9.31).cos() * 281.7).fract();
+    let seed_kind = ((f * 5.17).sin() * 113.9).fract();
+
+    let angle = seed_a * std::f32::consts::TAU;
+
+    // Sub-bass: camera fall (faster inward scroll).
+    let fall_speed = 8.0 + audio.sub_bass * 22.0 + audio.bass * 6.0;
+    let z_raw = -((seed_r * 60.0 + time * fall_speed) % 60.0);
+
+    // Tunnel walls flare slightly toward camera (perspective grid).
+    let depth_norm = (-z_raw) / 60.0;
+    let wall_radius = 0.6 + depth_norm * 6.4;
+
+    // Most points = sparse wall; rare points = chunky machine debris (~5%).
+    let is_debris = seed_kind > 0.95;
+
+    let r = if is_debris {
+        wall_radius * (0.4 + seed_r * 0.5)
+    } else {
+        wall_radius * (0.98 + (seed_r * 6.28 + time * 0.7).sin() * 0.04)
+    };
+
+    let mut x = angle.cos() * r;
+    let mut y = angle.sin() * r * 0.85;
+
+    // Slow drifting low-freq noise clouds laterally — only on non-debris.
+    if !is_debris {
+        let drift_x = (time * 0.13 + seed_a * 6.0).sin() * (0.6 + audio.bass * 0.4);
+        let drift_y = (time * 0.11 - seed_r * 4.5).cos() * (0.4 + audio.mid * 0.3);
+        x += drift_x * 0.25;
+        y += drift_y * 0.25;
+    } else {
+        // Machine flash on transient: snap radial pop.
+        let flash = audio.transient_strength();
+        let pop = flash * 0.9 * (1.0 - depth_norm);
+        x += angle.cos() * pop;
+        y += angle.sin() * pop;
+    }
+
+    (x, y, z_raw)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{vertex, NUM_VERTICES};
     use crate::audio::AudioState;
-    use crate::presets::Preset;
+    use crate::presets::{Preset, PRESET_COUNT};
+    use rstest::rstest;
 
-    fn sample_audio_state() -> AudioState {
+    pub(crate) fn sample_audio_state() -> AudioState {
         let mut state = AudioState::new();
         state.sub_bass = 0.52;
         state.bass = 0.61;
@@ -646,7 +855,7 @@ mod tests {
         let sample_indices = [0, NUM_VERTICES / 11, NUM_VERTICES / 3, NUM_VERTICES / 2, NUM_VERTICES - 1];
         let sample_times = [0.0_f32, 0.8, 2.6, 7.9];
 
-        for preset_idx in 0..20_u32 {
+        for preset_idx in 0..PRESET_COUNT {
             let preset = Preset::from_index(preset_idx);
 
             for &index in &sample_indices {
@@ -660,5 +869,131 @@ mod tests {
                 }
             }
         }
+    }
+
+    // ----- Per-preset psychedelic geometry tests (rstest) -------------------
+
+    #[rstest]
+    #[case::peyote(Preset::Peyote)]
+    #[case::hyperspace(Preset::Hyperspace)]
+    #[case::mycelia(Preset::Mycelia)]
+    #[case::recursion(Preset::Recursion)]
+    #[case::k_hole(Preset::KHole)]
+    fn new_psychedelic_presets_produce_finite_bounded_vertices(#[case] preset: Preset) {
+        let audio = sample_audio_state();
+        let indices = [0, 1, 137, NUM_VERTICES / 4, NUM_VERTICES / 2, NUM_VERTICES - 1];
+        let times = [0.0_f32, 0.5, 2.3, 6.4, 18.7];
+
+        for &index in &indices {
+            for &time in &times {
+                let (x, y, z) = vertex(index, preset, &audio, time);
+                assert!(
+                    x.is_finite() && y.is_finite() && z.is_finite(),
+                    "non-finite vertex for {:?} at idx={} t={}",
+                    preset, index, time
+                );
+                assert!(x.abs() <= 160.0 && y.abs() <= 160.0 && z.abs() <= 160.0,
+                    "out-of-bounds vertex for {:?}: ({},{},{})", preset, x, y, z);
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::peyote_vs_hyperspace(Preset::Peyote, Preset::Hyperspace)]
+    #[case::peyote_vs_mycelia(Preset::Peyote, Preset::Mycelia)]
+    #[case::peyote_vs_recursion(Preset::Peyote, Preset::Recursion)]
+    #[case::peyote_vs_khole(Preset::Peyote, Preset::KHole)]
+    #[case::hyperspace_vs_mycelia(Preset::Hyperspace, Preset::Mycelia)]
+    #[case::hyperspace_vs_recursion(Preset::Hyperspace, Preset::Recursion)]
+    #[case::hyperspace_vs_khole(Preset::Hyperspace, Preset::KHole)]
+    #[case::mycelia_vs_recursion(Preset::Mycelia, Preset::Recursion)]
+    #[case::mycelia_vs_khole(Preset::Mycelia, Preset::KHole)]
+    #[case::recursion_vs_khole(Preset::Recursion, Preset::KHole)]
+    fn psychedelic_presets_produce_distinct_geometry(#[case] a: Preset, #[case] b: Preset) {
+        let audio = sample_audio_state();
+        let time = 2.0_f32;
+
+        let mut sum_sq = 0.0_f64;
+        let samples = 96_usize;
+        for i in 0..samples {
+            let idx = i * (NUM_VERTICES / samples).max(1);
+            let pa = vertex(idx, a, &audio, time);
+            let pb = vertex(idx, b, &audio, time);
+            let dx = (pa.0 - pb.0) as f64;
+            let dy = (pa.1 - pb.1) as f64;
+            let dz = (pa.2 - pb.2) as f64;
+            sum_sq += (dx * dx + dy * dy + dz * dz).sqrt();
+        }
+        let mean_distance = sum_sq / samples as f64;
+        assert!(
+            mean_distance > 0.5,
+            "presets {:?} and {:?} too similar: mean d = {}",
+            a, b, mean_distance
+        );
+    }
+
+    #[test]
+    fn peyote_geometry_reacts_to_bass() {
+        let mut quiet = sample_audio_state();
+        quiet.bass = 0.0;
+        quiet.sub_bass = 0.0;
+        let mut loud = sample_audio_state();
+        loud.bass = 0.9;
+        loud.sub_bass = 0.85;
+
+        let time = 1.3_f32;
+        let mut difference = 0.0_f64;
+        for idx in (0..NUM_VERTICES).step_by(120) {
+            let q = vertex(idx, Preset::Peyote, &quiet, time);
+            let l = vertex(idx, Preset::Peyote, &loud, time);
+            let dx = (q.0 - l.0) as f64;
+            let dy = (q.1 - l.1) as f64;
+            let dz = (q.2 - l.2) as f64;
+            difference += (dx * dx + dy * dy + dz * dz).sqrt();
+        }
+        assert!(
+            difference > 5.0,
+            "peyote barely reacts to bass: total diff = {}",
+            difference
+        );
+    }
+
+    #[test]
+    fn k_hole_radius_correlates_with_depth() {
+        let audio = sample_audio_state();
+        let time = 0.7_f32;
+
+        // K-Hole has rare debris (~5%) with different radius formula — skip those.
+        // Wall radius formula: r ∝ (-z_raw)/60.0; nearer to camera (smaller |z|) = smaller r.
+        let mut near_radii: Vec<f32> = Vec::new();
+        let mut far_radii: Vec<f32> = Vec::new();
+
+        for idx in 0..NUM_VERTICES {
+            // Skip debris by recomputing seed_kind exactly as the function does.
+            let f = idx as f32;
+            let seed_kind = ((f * 5.17).sin() * 113.9).fract();
+            if seed_kind > 0.95 {
+                continue;
+            }
+
+            let (x, y, z) = vertex(idx, Preset::KHole, &audio, time);
+            let r = (x * x + y * y).sqrt();
+            let depth = (-z) / 60.0;
+
+            if depth < 0.2 {
+                near_radii.push(r);
+            } else if depth > 0.7 {
+                far_radii.push(r);
+            }
+        }
+
+        let near_mean = near_radii.iter().sum::<f32>() / near_radii.len().max(1) as f32;
+        let far_mean = far_radii.iter().sum::<f32>() / far_radii.len().max(1) as f32;
+
+        assert!(
+            far_mean > near_mean * 2.0,
+            "k-hole tunnel doesn't flare with depth: near={} far={}",
+            near_mean, far_mean
+        );
     }
 }

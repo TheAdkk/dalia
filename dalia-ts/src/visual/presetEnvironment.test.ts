@@ -57,7 +57,7 @@ describe('getPresetEnvironment', () => {
   });
 
   it('keeps finite bounded outputs for all presets', () => {
-    for (let presetIndex = 0; presetIndex < 20; presetIndex += 1) {
+    for (let presetIndex = 0; presetIndex < 26; presetIndex += 1) {
       const env = getPresetEnvironment(presetIndex, 0.62, 0.47, true);
 
       for (const key of NUMERIC_KEYS) {
@@ -77,11 +77,11 @@ describe('getPresetEnvironment', () => {
   it('avoids repeated modulo-4 environments and preserves spacing', () => {
     const driveDynamic = 0.44;
     const driveTransient = 0.35;
-    const envs = Array.from({ length: 20 }, (_, index) =>
+    const envs = Array.from({ length: 26 }, (_, index) =>
       getPresetEnvironment(index, driveDynamic, driveTransient, true),
     );
 
-    for (let i = 0; i < 16; i += 1) {
+    for (let i = 0; i < 21; i += 1) {
       expect(envs[i]).not.toStrictEqual(envs[i + 4]);
     }
 
@@ -93,5 +93,55 @@ describe('getPresetEnvironment', () => {
     }
 
     expect(minDistance).toBeGreaterThan(0.03);
+  });
+
+  it('exposes distinct profiles for the 5 psychedelic presets', () => {
+    const drive = 0.5;
+    const trans = 0.4;
+    const psychedelic = [20, 21, 22, 23, 24].map((i) =>
+      getPresetEnvironment(i, drive, trans, true),
+    );
+    const legacy = Array.from({ length: 20 }, (_, i) =>
+      getPresetEnvironment(i, drive, trans, true),
+    );
+
+    for (const psyche of psychedelic) {
+      for (const old of legacy) {
+        // At least one field must differ — no accidental clone of an old profile.
+        const same =
+          psyche.fogColor === old.fogColor &&
+          NUMERIC_KEYS.every((k) => Math.abs(psyche[k] - old[k]) < 1e-9);
+        expect(same).toBe(false);
+      }
+    }
+  });
+
+  it('k-hole has the lowest tunnel hue mix and glitch gain among all presets', () => {
+    const drive = 0.4;
+    const trans = 0.3;
+    const envs = Array.from({ length: 26 }, (_, index) =>
+      getPresetEnvironment(index, drive, trans, true),
+    );
+    const kHole = envs[24];
+
+    for (let i = 0; i < envs.length; i += 1) {
+      if (i === 24) continue;
+      expect(kHole.tunnelHueMix).toBeLessThanOrEqual(envs[i].tunnelHueMix);
+      expect(kHole.glitchGain).toBeLessThanOrEqual(envs[i].glitchGain);
+    }
+  });
+
+  it('hyperspace has the strongest bloom among all presets', () => {
+    const drive = 0.6;
+    const trans = 0.5;
+    const envs = Array.from({ length: 26 }, (_, index) =>
+      getPresetEnvironment(index, drive, trans, true),
+    );
+    const hyperspace = envs[21];
+
+    for (let i = 0; i < envs.length; i += 1) {
+      if (i === 21) continue;
+      expect(hyperspace.bloomBoost).toBeGreaterThanOrEqual(envs[i].bloomBoost);
+    }
   });
 });
